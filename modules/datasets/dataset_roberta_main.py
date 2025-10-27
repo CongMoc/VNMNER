@@ -263,19 +263,49 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
         assert len(auxlabel_ids) == max_seq_length
 
         image_name = example.img_id
-        image_path = os.path.join(path_img, image_name)
 
-        if not os.path.exists(image_path):
-            if 'NaN' not in image_path:
-                print(image_path)
-        try:
-            image = image_process(image_path, transform)
-            image_ti_feat = image_process(image_path, transform_for_ti)
-        except:
+        # Resolve image file robustly. Support cases where images are all in one
+        # folder and filenames may have different extensions or the img_id
+        # may or may not include the extension.
+        def find_image_file(root_dir, img_name):
+            # If img_name already looks like a path with extension, check directly
+            candidate = os.path.join(root_dir, img_name)
+            if os.path.exists(candidate):
+                return candidate
+
+            # Try common extensions if img_name has no extension
+            name_no_ext, ext = os.path.splitext(img_name)
+            common_exts = ['.jpg', '.jpeg', '.png', '.bmp']
+            if ext == '':
+                for e in common_exts:
+                    candidate = os.path.join(root_dir, name_no_ext + e)
+                    if os.path.exists(candidate):
+                        return candidate
+
+            # Fallback: search the directory for a filename that contains the img id
+            # (useful when filenames are prefixed/suffixed)
+            try:
+                for fname in os.listdir(root_dir):
+                    if name_no_ext in fname:
+                        return os.path.join(root_dir, fname)
+            except Exception:
+                pass
+
+            # If nothing found, return None
+            return None
+
+        image_path = find_image_file(path_img, image_name)
+
+        if image_path is None or not os.path.exists(image_path):
+            # log a concise message (do not spam) and use background fallback
+            if 'NaN' not in (image_name or ''):
+                print(f"Image not found for '{image_name}' in '{path_img}'")
             count += 1
-            image_path_fail = os.path.join(path_img, 'background.jpg')
-            image = image_process(image_path_fail, transform)
-            image_ti_feat = image_process(image_path_fail, transform_for_ti)
+            image_path = os.path.join(path_img, 'background.jpg')
+
+        # Load image (this may still raise if background.jpg missing)
+        image = image_process(image_path, transform)
+        image_ti_feat = image_process(image_path, transform_for_ti)
 
         if ex_index < 2:
             logger.info("*** Example ***")
