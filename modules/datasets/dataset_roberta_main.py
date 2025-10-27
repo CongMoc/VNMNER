@@ -328,11 +328,23 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
         image_path = find_image_file(path_img, image_name)
 
         if image_path is None or not os.path.exists(image_path):
-            # log a concise message (do not spam) and use background fallback
+            # log a concise message (do not spam)
             if 'NaN' not in (image_name or ''):
                 print(f"Image not found for '{image_name}' in '{path_img}'")
             count += 1
-            image_path = os.path.join(path_img, 'background.jpg')
+            # Try to find a background.jpg in the image folder first
+            candidate_bg = os.path.join(path_img, 'background.jpg')
+            if os.path.exists(candidate_bg):
+                image_path = candidate_bg
+            else:
+                # Fallback: try repo's sample_data/ner_image/background.jpg
+                repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+                sample_bg = os.path.join(repo_root, 'sample_data', 'ner_image', 'background.jpg')
+                if os.path.exists(sample_bg):
+                    image_path = sample_bg
+                else:
+                    # keep candidate_bg (may not exist) so image_process will raise or behave as before
+                    image_path = candidate_bg
 
         # Load image (this may still raise if background.jpg missing)
         image = image_process(image_path, transform)
