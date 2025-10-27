@@ -60,11 +60,13 @@ def sbreadfile(filename):
     a = 0
     for line in f:
         if line.startswith('IMGID:'):
-            imgid = line.strip().split('IMGID:')[1] + '.jpg'
+            # strip whitespace around the id part to avoid leading/trailing spaces
+            imgid = line.strip().split('IMGID:')[1].strip() + '.jpg'
             continue
 
         if line[0] == "\n":
             if len(sentence) > 0:
+                # append collected sentence and labels as-is
                 data.append((sentence, label))
                 imgs.append(imgid)
                 auxlabels.append(auxlabel)
@@ -73,21 +75,28 @@ def sbreadfile(filename):
                 imgid = ''
                 auxlabel = []
             continue
-        splits = line.split('\t')
-        
-        if splits[0] == '' or splits[0].isspace() or splits[0] in SPECIAL_TOKENS or splits[0].startswith(URL_PREFIX):
-            splits[0] = "<unk>"
-        
-        sentence.append(splits[0])
-        cur_label = splits[-1][:-1]
+        splits = line.rstrip('\n').split('\t')
+
+        token = splits[0] if len(splits) > 0 else ""
+        if token == '' or token.isspace() or token in SPECIAL_TOKENS or token.startswith(URL_PREFIX):
+            token = "<unk>"
+
+        sentence.append(token)
+        # robust label extraction: if missing, default to 'O'
+        if len(splits) >= 2 and splits[-1].strip() != '':
+            cur_label = splits[-1].strip()
+        else:
+            cur_label = 'O'
+
         if cur_label == 'B-OTHER':
             cur_label = 'B-MISC'
         elif cur_label == 'I-OTHER':
             cur_label = 'I-MISC'
         label.append(cur_label)
-        auxlabel.append(cur_label[0])
+        auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
 
     if len(sentence) > 0:
+        # append final sample as-is
         data.append((sentence, label))
         imgs.append(imgid)
         auxlabels.append(auxlabel)
@@ -138,12 +147,27 @@ class MNERProcessor(DataProcessor):
         return self._create_examples(data, imgs, auxlabels, "test")
 
     def get_labels(self):
-        return os.getenv("LABELS", "").split(",")
-        # vlsp2021
-        # return ["O","I-PRODUCT-AWARD","B-MISCELLANEOUS","B-QUANTITY-NUM","B-ORGANIZATION-SPORTS","B-DATETIME","I-ADDRESS","I-PERSON","I-EVENT-SPORT","B-ADDRESS","B-EVENT-NATURAL","I-LOCATION-GPE","B-EVENT-GAMESHOW","B-DATETIME-TIMERANGE","I-QUANTITY-NUM","I-QUANTITY-AGE","B-EVENT-CUL","I-QUANTITY-TEM","I-PRODUCT-LEGAL","I-LOCATION-STRUC","I-ORGANIZATION","B-PHONENUMBER","B-IP","B-QUANTITY-AGE","I-DATETIME-TIME","I-DATETIME","B-ORGANIZATION-MED","B-DATETIME-SET","I-EVENT-CUL","B-QUANTITY-DIM","I-QUANTITY-DIM","B-EVENT","B-DATETIME-DATERANGE","I-EVENT-GAMESHOW","B-PRODUCT-AWARD","B-LOCATION-STRUC","B-LOCATION","B-PRODUCT","I-MISCELLANEOUS","B-SKILL","I-QUANTITY-ORD","I-ORGANIZATION-STOCK","I-LOCATION-GEO","B-PERSON","B-PRODUCT-COM","B-PRODUCT-LEGAL","I-LOCATION","B-QUANTITY-TEM","I-PRODUCT","B-QUANTITY-CUR","I-QUANTITY-CUR","B-LOCATION-GPE","I-PHONENUMBER","I-ORGANIZATION-MED","I-EVENT-NATURAL","I-EMAIL","B-ORGANIZATION","B-URL","I-DATETIME-TIMERANGE","I-QUANTITY","I-IP","B-EVENT-SPORT","B-PERSONTYPE","B-QUANTITY-PER","I-QUANTITY-PER","I-PRODUCT-COM","I-DATETIME-DURATION","B-LOCATION-GPE-GEO","B-QUANTITY-ORD","I-EVENT","B-DATETIME-TIME","B-QUANTITY","I-DATETIME-SET","I-LOCATION-GPE-GEO","B-ORGANIZATION-STOCK","I-ORGANIZATION-SPORTS","I-SKILL","I-URL","B-DATETIME-DURATION","I-DATETIME-DATE","I-PERSONTYPE","B-DATETIME-DATE","I-DATETIME-DATERANGE","B-LOCATION-GEO","B-EMAIL","X","<s>", "</s>"]
-        
-        # vlsp2016
-        return ["O","B-ORG","B-MISC","I-PER","I-ORG","B-LOC","I-MISC","I-LOC","B-PER","X","<s>","</s>"]
+        # Explicit label set as requested
+        return [
+            "B-ORG",
+            "B-MISC",
+            "I-PER",
+            "I-ORG",
+            "B-LOC",
+            "I-MISC",
+            "I-LOC",
+            "O",
+            "B-PER",
+            "B-NUM",
+            "I-NUM",
+            "B-DATE",
+            "I-DATE",
+            "B-OTHER",
+            "I-OTHER",
+            "X",
+            "<s>",
+            "</s>",
+        ]
 
         # vlsp2018
         # return ["O","I-ORGANIZATION","B-ORGANIZATION","I-LOCATION","B-MISCELLANEOUS","I-PERSON","B-PERSON","I-MISCELLANEOUS","B-LOCATION","X","<s>","</s>"]
@@ -205,17 +229,24 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
                                 (0.214, 0.207, 0.207))])
 
     for (ex_index, example) in enumerate(examples):
-        textlist = example.text_a.split(' ')
+        # split on any whitespace to avoid empty tokens when multiple spaces
+        textlist = example.text_a.split()
         labellist = example.label
         auxlabellist = example.auxlabel
         tokens = []
         labels = []
         auxlabels = []
         for i, word in enumerate(textlist):
+            # If there are fewer labels than words, assign default 'O' instead of crashing
+            if i >= len(labellist):
+                label_1 = 'O'
+                auxlabel_1 = 'O'
+            else:
+                label_1 = labellist[i]
+                auxlabel_1 = auxlabellist[i]
+
             token = tokenizer.tokenize(word)
             tokens.extend(token)
-            label_1 = labellist[i]
-            auxlabel_1 = auxlabellist[i]
             for m in range(len(token)):
                 if m == 0:
                     labels.append(label_1)
