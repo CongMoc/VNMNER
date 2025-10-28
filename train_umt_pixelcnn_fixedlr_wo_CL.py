@@ -837,20 +837,25 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
                 if j == 0:
                     continue
                 if m:
-                    if label_map[label_ids[i][j]] != "X" and label_map[label_ids[i][j]] != "</s>":
+                    if label_map.get(label_ids[i][j], "UNK") != "X" and label_map.get(label_ids[i][j], "UNK") != "</s>":
                         temp_1.append(label_map[label_ids[i][j]])
                         tmp1_idx.append(label_ids[i][j])
                         temp_2.append(label_map[logits[i][j]])
                         tmp2_idx.append(logits[i][j])
                 else:
-
                     break
-            y_true.append(temp_1)
-            y_pred.append(temp_2)
-            y_true_idx.append(tmp1_idx)
-            y_pred_idx.append(tmp2_idx)
+            # Only add non-empty sequences
+            if temp_1 and temp_2:
+                y_true.append(temp_1)
+                y_pred.append(temp_2)
+                y_true_idx.append(tmp1_idx)
+                y_pred_idx.append(tmp2_idx)
 
-    if y_true and y_pred:
+    # Debug information
+    logger.info(f"Total test predictions collected: {len(y_pred)}")
+    logger.info(f"Total test true labels collected: {len(y_true)}")
+    
+    if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
         report = classification_report(y_true, y_pred, digits=4)
 
         sentence_list = []
@@ -882,3 +887,7 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             writer.write(report)
             writer.write("Overall: " + str(p) + ' ' +
                          str(r) + ' ' + str(f1) + '\n')
+    else:
+        logger.warning("***** WARNING: No valid predictions found in test set! *****")
+        logger.warning(f"y_true length: {len(y_true)}, y_pred length: {len(y_pred)}")
+        logger.warning("Test evaluation skipped due to empty predictions.")
