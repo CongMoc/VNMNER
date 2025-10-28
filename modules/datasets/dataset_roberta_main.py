@@ -1,14 +1,17 @@
-import torch 
+from PIL import Image
+from torchvision import transforms
+import torch
 import logging
 import os
 logger = logging.getLogger(__name__)
-from torchvision import transforms
-from PIL import Image
 SPECIAL_TOKENS = ['\ufe0f', '\u200d', '\u200b', '\x92']
 URL_PREFIX = 'http'
+
+
 class SBInputExample(object):
     """A single training/test example for simple sequence classification."""
-    def __init__(self,guid,text_a,text_b,img_id,label=None,auxlabel=None):
+
+    def __init__(self, guid, text_a, text_b, img_id, label=None, auxlabel=None):
         """Constructs a InputExample.
 
         Args:
@@ -21,26 +24,28 @@ class SBInputExample(object):
             specified for train and dev examples, but not for test examples.
         """
         self.guid = guid
-        self.text_a=text_a
-        self.text_b=text_b
+        self.text_a = text_a
+        self.text_b = text_b
         self.img_id = img_id
         self.label = label
         # Please note that the auxlabel is not used in SB
         # it is just kept in order not to modify the original code
         self.auxlabel = auxlabel
 
+
 class SBInputFeatures(object):
     """A single set of features of data"""
 
-    def __init__(self,input_ids,input_mask,added_input_mask,segment_ids,img_feat,img_ti_feat,label_id,auxlabel_id):
+    def __init__(self, input_ids, input_mask, added_input_mask, segment_ids, img_feat, img_ti_feat, label_id, auxlabel_id):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.added_input_mask = added_input_mask
         self.segment_ids = segment_ids
         self.img_feat = img_feat
-        self.img_ti_feat= img_ti_feat
+        self.img_ti_feat = img_ti_feat
         self.label_id = label_id
         self.auxlabel_id = auxlabel_id
+
 
 def sbreadfile(filename):
     '''
@@ -48,8 +53,8 @@ def sbreadfile(filename):
     return format :
     [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
     '''
-    print("prepare data for ",filename)
-    f = open(filename,encoding='utf8')
+    print("prepare data for ", filename)
+    f = open(filename, encoding='utf8')
     data = []
     imgs = []
     auxlabels = []
@@ -61,7 +66,17 @@ def sbreadfile(filename):
     for line in f:
         if line.startswith('IMGID:'):
             # strip whitespace around the id part to avoid leading/trailing spaces
-            imgid = line.strip().split('IMGID:')[1].strip() + '.jpg'
+            raw_id = line.strip().split('IMGID:')[1].strip()
+            # If IMGID is empty, keep it empty; if it already has an extension, keep as-is,
+            # otherwise append '.jpg'. This avoids creating names like 'foo.jpg.jpg'
+            if raw_id == '':
+                imgid = ''
+            else:
+                name_no_ext, ext = os.path.splitext(raw_id)
+                if ext == '':
+                    imgid = raw_id + '.jpg'
+                else:
+                    imgid = raw_id
             continue
 
         if line[0] == "\n":
@@ -108,6 +123,7 @@ def sbreadfile(filename):
     print("The number of images: " + str(len(imgs)))
     return data, imgs, auxlabels
 
+
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
@@ -128,22 +144,26 @@ class DataProcessor(object):
         """Reads a tab separated value file."""
         return sbreadfile(input_file)
 
+
 class MNERProcessor(DataProcessor):
     """Processor for the CoNLL-2003 data set."""
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        data, imgs, auxlabels = self._read_sbtsv(os.path.join(data_dir, "train.txt"))
+        data, imgs, auxlabels = self._read_sbtsv(
+            os.path.join(data_dir, "train.txt"))
         return self._create_examples(data, imgs, auxlabels, "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        data, imgs, auxlabels = self._read_sbtsv(os.path.join(data_dir, "dev.txt"))
+        data, imgs, auxlabels = self._read_sbtsv(
+            os.path.join(data_dir, "dev.txt"))
         return self._create_examples(data, imgs, auxlabels, "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        data, imgs, auxlabels = self._read_sbtsv(os.path.join(data_dir, "test.txt"))
+        data, imgs, auxlabels = self._read_sbtsv(
+            os.path.join(data_dir, "test.txt"))
         return self._create_examples(data, imgs, auxlabels, "test")
 
     def get_labels(self):
@@ -204,29 +224,31 @@ def image_process(image_path, transform):
     image = transform(image)
     return image
 
+
 def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
- max_seq_length, tokenizer, crop_size,path_img):
+                                    max_seq_length, tokenizer, crop_size, path_img):
 
     label_map = {label: i for i, label in enumerate(label_list, 1)}
     auxlabel_map = {label: i for i, label in enumerate(auxlabel_list, 1)}
 
     features = []
     count = 0
-    ti_crop_size=32
+    ti_crop_size = 32
 
     transform = transforms.Compose([
-            transforms.Resize([256, 256]),
-            transforms.RandomCrop(crop_size),  # args.crop_size, by default it is set to be 224
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406),
-                                (0.229, 0.224, 0.225))])
+        transforms.Resize([256, 256]),
+        # args.crop_size, by default it is set to be 224
+        transforms.RandomCrop(crop_size),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406),
+                             (0.229, 0.224, 0.225))])
 
     transform_for_ti = transforms.Compose([
-            transforms.Resize([ti_crop_size, ti_crop_size]),  # 调整图片到指定的大小
-            transforms.ToTensor(),
-            transforms.Normalize((0.48, 0.498, 0.531),
-                                (0.214, 0.207, 0.207))])
+        transforms.Resize([ti_crop_size, ti_crop_size]),  # 调整图片到指定的大小
+        transforms.ToTensor(),
+        transforms.Normalize((0.48, 0.498, 0.531),
+                             (0.214, 0.207, 0.207))])
 
     for (ex_index, example) in enumerate(examples):
         # split on any whitespace to avoid empty tokens when multiple spaces
@@ -277,7 +299,8 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
         auxlabel_ids.append(auxlabel_map["</s>"])
         input_ids = tokenizer.convert_tokens_to_ids(ntokens)
         input_mask = [1] * len(input_ids)
-        added_input_mask = [1] * (len(input_ids) + 49)  # 1 or 49 is for encoding regional image representations
+        # 1 or 49 is for encoding regional image representations
+        added_input_mask = [1] * (len(input_ids) + 49)
 
         while len(input_ids) < max_seq_length:
             input_ids.append(0)
@@ -301,16 +324,27 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
         def find_image_file(root_dir, img_name):
             # If img_name already looks like a path with extension, check directly
             candidate = os.path.join(root_dir, img_name)
-            if os.path.exists(candidate):
+            # Only accept candidate if it's a file. If it's a directory (or empty), treat as not found
+            if os.path.exists(candidate) and os.path.isfile(candidate):
                 return candidate
 
-            # Try common extensions if img_name has no extension
+            # Try common extensions. If img_name already has an extension but the exact file
+            # is missing, attempt other common extensions (e.g., .png when .jpg missing).
             name_no_ext, ext = os.path.splitext(img_name)
             common_exts = ['.jpg', '.jpeg', '.png', '.bmp']
-            if ext == '':
+            if ext != '':
+                # image name had an extension but the file wasn't found; try other extensions
+                for e in common_exts:
+                    if e.lower() == ext.lower():
+                        continue
+                    candidate = os.path.join(root_dir, name_no_ext + e)
+                    if os.path.exists(candidate) and os.path.isfile(candidate):
+                        return candidate
+            else:
+                # no extension provided; try common extensions
                 for e in common_exts:
                     candidate = os.path.join(root_dir, name_no_ext + e)
-                    if os.path.exists(candidate):
+                    if os.path.exists(candidate) and os.path.isfile(candidate):
                         return candidate
 
             # Fallback: search the directory for a filename that contains the img id
@@ -338,8 +372,10 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
                 image_path = candidate_bg
             else:
                 # Fallback: try repo's sample_data/ner_image/background.jpg
-                repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-                sample_bg = os.path.join(repo_root, 'sample_data', 'ner_image', 'background.jpg')
+                repo_root = os.path.abspath(os.path.join(
+                    os.path.dirname(__file__), '..', '..'))
+                sample_bg = os.path.join(
+                    repo_root, 'sample_data', 'ner_image', 'background.jpg')
                 if os.path.exists(sample_bg):
                     image_path = sample_bg
                 else:
@@ -355,8 +391,10 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join(
                 [str(x) for x in tokens]))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            logger.info("input_ids: %s" %
+                        " ".join([str(x) for x in input_ids]))
+            logger.info("input_mask: %s" %
+                        " ".join([str(x) for x in input_mask]))
             logger.info(
                 "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
 
@@ -364,7 +402,8 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
             # logger.info(f"img_ti_feat: {image_ti_feat.shape}")
 
             logger.info("label: %s" % " ".join([str(x) for x in label_ids]))
-            logger.info("auxlabel: %s" % " ".join([str(x) for x in auxlabel_ids]))
+            logger.info("auxlabel: %s" % " ".join(
+                [str(x) for x in auxlabel_ids]))
 
         features.append(
             SBInputFeatures(input_ids=input_ids, input_mask=input_mask, added_input_mask=added_input_mask,
@@ -378,7 +417,8 @@ if __name__ == "__main__":
     processor = MNERProcessor()
     label_list = processor.get_labels()
     auxlabel_list = processor.get_auxlabels()
-    num_labels = len(label_list) + 1  # label 0 corresponds to padding, label in label_list starts from 1
+    # label 0 corresponds to padding, label in label_list starts from 1
+    num_labels = len(label_list) + 1
 
     start_label_id = processor.get_start_label_id()
     stop_label_id = processor.get_stop_label_id()
@@ -389,6 +429,6 @@ if __name__ == "__main__":
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
     eval_features = convert_mm_examples_to_features(
-            eval_examples, label_list, auxlabel_list, 256, tokenizer, 224, data_dir+'/ner_image')
-    
+        eval_examples, label_list, auxlabel_list, 256, tokenizer, 224, data_dir+'/ner_image')
+
     print(len(eval_features))

@@ -1,15 +1,18 @@
-import torch 
+from PIL import Image
+from torchvision import transforms
+import torch
 import logging
 import os
 from transformers import AutoTokenizer
 logger = logging.getLogger(__name__)
-from torchvision import transforms
-from PIL import Image
 SPECIAL_TOKENS = ['\ufe0f', '\u200d', '\u200b', '\x92']
 URL_PREFIX = 'http'
+
+
 class SBInputExample(object):
     """A single training/test example for simple sequence classification."""
-    def __init__(self,guid,text_a,text_b,img_id,label=None,auxlabel=None):
+
+    def __init__(self, guid, text_a, text_b, img_id, label=None, auxlabel=None):
         """Constructs a InputExample.
 
         Args:
@@ -22,13 +25,14 @@ class SBInputExample(object):
             specified for train and dev examples, but not for test examples.
         """
         self.guid = guid
-        self.text_a=text_a
-        self.text_b=text_b
+        self.text_a = text_a
+        self.text_b = text_b
         self.img_id = img_id
         self.label = label
         # Please note that the auxlabel is not used in SB
         # it is just kept in order not to modify the original code
         self.auxlabel = auxlabel
+
 
 class SBInputFeatures(object):
     """A single set of features of data"""
@@ -55,17 +59,17 @@ class SBInputFeatures(object):
         self.input_mask_external = input_mask_external
         self.added_input_mask_external = added_input_mask_external
         self.segment_ids_external = segment_ids_external
-        
+
         # Origin inputs
         self.input_ids_origin = input_ids_origin
         self.input_mask_origin = input_mask_origin
         self.added_input_mask_origin = added_input_mask_origin
         self.segment_ids_origin = segment_ids_origin
-        
+
         # Image features
         self.img_feat = img_feat
         self.img_ti_feat = img_ti_feat
-        
+
         # Labels
         self.label_id_external = label_ids_external
         self.label_id_origin = label_ids_origin
@@ -92,14 +96,15 @@ class SBInputFeatures(object):
             f")"
         )
 
+
 def sbreadfile(filename):
     '''
     read file
     return format :
     [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
     '''
-    print("prepare data for ",filename)
-    f = open(filename,encoding='utf8')
+    print("prepare data for ", filename)
+    f = open(filename, encoding='utf8')
     data = []
     imgs = []
     auxlabels = []
@@ -110,7 +115,15 @@ def sbreadfile(filename):
     a = 0
     for line in f:
         if line.startswith('IMGID:'):
-            imgid = line.strip().split('IMGID:')[1] + '.jpg'
+            raw_id = line.strip().split('IMGID:')[1].strip()
+            if raw_id == '':
+                imgid = ''
+            else:
+                name_no_ext, ext = os.path.splitext(raw_id)
+                if ext == '':
+                    imgid = raw_id + '.jpg'
+                else:
+                    imgid = raw_id
             continue
 
         if line[0] == "\n":
@@ -124,14 +137,14 @@ def sbreadfile(filename):
                 auxlabel = []
             continue
         splits = line.split('\t')
-        
+
         if splits[0] == "<eos>":
             splits[0] = "</s>"
         if splits[0] == "<EOS>":
             splits[0] = "</s>"
         if splits[0] == '' or splits[0].isspace() or splits[0] in SPECIAL_TOKENS or splits[0].startswith(URL_PREFIX):
             splits[0] = "<unk>"
-        
+
         sentence.append(splits[0])
         cur_label = splits[-1][:-1]
         if cur_label == 'B-OTHER':
@@ -153,6 +166,7 @@ def sbreadfile(filename):
     print("The number of images: " + str(len(imgs)))
     return data, imgs, auxlabels
 
+
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
@@ -173,31 +187,35 @@ class DataProcessor(object):
         """Reads a tab separated value file."""
         return sbreadfile(input_file)
 
+
 class MNERProcessor(DataProcessor):
     """Processor for the CoNLL-2003 data set."""
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        data, imgs, auxlabels = self._read_sbtsv(os.path.join(data_dir, "train.txt"))
+        data, imgs, auxlabels = self._read_sbtsv(
+            os.path.join(data_dir, "train.txt"))
         return self._create_examples(data, imgs, auxlabels, "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        data, imgs, auxlabels = self._read_sbtsv(os.path.join(data_dir, "dev.txt"))
+        data, imgs, auxlabels = self._read_sbtsv(
+            os.path.join(data_dir, "dev.txt"))
         return self._create_examples(data, imgs, auxlabels, "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        data, imgs, auxlabels = self._read_sbtsv(os.path.join(data_dir, "test.txt"))
+        data, imgs, auxlabels = self._read_sbtsv(
+            os.path.join(data_dir, "test.txt"))
         return self._create_examples(data, imgs, auxlabels, "test")
 
     def get_labels(self):
         # return os.getenv("LABELS", "").split(",")
         # vlsp2021
         # return ["O","I-PRODUCT-AWARD","B-MISCELLANEOUS","B-QUANTITY-NUM","B-ORGANIZATION-SPORTS","B-DATETIME","I-ADDRESS","I-PERSON","I-EVENT-SPORT","B-ADDRESS","B-EVENT-NATURAL","I-LOCATION-GPE","B-EVENT-GAMESHOW","B-DATETIME-TIMERANGE","I-QUANTITY-NUM","I-QUANTITY-AGE","B-EVENT-CUL","I-QUANTITY-TEM","I-PRODUCT-LEGAL","I-LOCATION-STRUC","I-ORGANIZATION","B-PHONENUMBER","B-IP","B-QUANTITY-AGE","I-DATETIME-TIME","I-DATETIME","B-ORGANIZATION-MED","B-DATETIME-SET","I-EVENT-CUL","B-QUANTITY-DIM","I-QUANTITY-DIM","B-EVENT","B-DATETIME-DATERANGE","I-EVENT-GAMESHOW","B-PRODUCT-AWARD","B-LOCATION-STRUC","B-LOCATION","B-PRODUCT","I-MISCELLANEOUS","B-SKILL","I-QUANTITY-ORD","I-ORGANIZATION-STOCK","I-LOCATION-GEO","B-PERSON","B-PRODUCT-COM","B-PRODUCT-LEGAL","I-LOCATION","B-QUANTITY-TEM","I-PRODUCT","B-QUANTITY-CUR","I-QUANTITY-CUR","B-LOCATION-GPE","I-PHONENUMBER","I-ORGANIZATION-MED","I-EVENT-NATURAL","I-EMAIL","B-ORGANIZATION","B-URL","I-DATETIME-TIMERANGE","I-QUANTITY","I-IP","B-EVENT-SPORT","B-PERSONTYPE","B-QUANTITY-PER","I-QUANTITY-PER","I-PRODUCT-COM","I-DATETIME-DURATION","B-LOCATION-GPE-GEO","B-QUANTITY-ORD","I-EVENT","B-DATETIME-TIME","B-QUANTITY","I-DATETIME-SET","I-LOCATION-GPE-GEO","B-ORGANIZATION-STOCK","I-ORGANIZATION-SPORTS","I-SKILL","I-URL","B-DATETIME-DURATION","I-DATETIME-DATE","I-PERSONTYPE","B-DATETIME-DATE","I-DATETIME-DATERANGE","B-LOCATION-GEO","B-EMAIL","X","<s>", "</s>"]
-        
+
         # vlsp2016
-        return ["O","B-ORG","B-MISC","I-PER","I-ORG","B-LOC","I-MISC","I-LOC","B-PER","E","X","<s>","</s>"]
+        return ["O", "B-ORG", "B-MISC", "I-PER", "I-ORG", "B-LOC", "I-MISC", "I-LOC", "B-PER", "E", "X", "<s>", "</s>"]
 
         # vlsp2018
         # return ["O","I-ORGANIZATION","B-ORGANIZATION","I-LOCATION","B-MISCELLANEOUS","I-PERSON","B-PERSON","I-MISCELLANEOUS","B-LOCATION","X","<s>","</s>"]
@@ -234,6 +252,7 @@ def image_process(image_path, transform):
     image = transform(image)
     return image
 
+
 def convert_mm_examples_to_features(examples, label_list, auxlabel_list, max_seq_length, tokenizer, crop_size, path_img):
     label_map = {label: i for i, label in enumerate(label_list, 1)}
     auxlabel_map = {label: i for i, label in enumerate(auxlabel_list, 1)}
@@ -248,13 +267,13 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list, max_seq
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406),
-                            (0.229, 0.224, 0.225))])
+                             (0.229, 0.224, 0.225))])
 
     transform_for_ti = transforms.Compose([
         transforms.Resize([ti_crop_size, ti_crop_size]),
         transforms.ToTensor(),
         transforms.Normalize((0.48, 0.498, 0.531),
-                            (0.214, 0.207, 0.207))])
+                             (0.214, 0.207, 0.207))])
 
     for (ex_index, example) in enumerate(examples):
         textlist = example.text_a.split(' ')
@@ -287,7 +306,7 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list, max_seq
         segment_ids_origin = []
         label_ids_origin = []
         auxlabel_ids_origin = []
-        
+
         ntokens.append("<s>")
         segment_ids_external.append(0)
         label_ids_external.append(label_map["<s>"])
@@ -345,7 +364,7 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list, max_seq
             segment_ids_external.append(0)
             label_ids_external.append(0)
             auxlabel_ids_external.append(0)
-        
+
         while len(input_ids_origin) < max_seq_length:
             input_ids_origin.append(0)
             input_mask_origin.append(0)
@@ -368,15 +387,56 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list, max_seq
         assert len(auxlabel_ids_origin) == max_seq_length
 
         image_name = example.img_id
-        image_path = os.path.join(path_img, image_name)
 
-        if not os.path.exists(image_path):
-            if 'NaN' not in image_path:
+        def find_image_file(root_dir, img_name):
+            candidate = os.path.join(root_dir, img_name)
+            if os.path.exists(candidate) and os.path.isfile(candidate):
+                return candidate
+            name_no_ext, ext = os.path.splitext(img_name)
+            common_exts = ['.jpg', '.jpeg', '.png', '.bmp']
+            if ext != '':
+                for e in common_exts:
+                    if e.lower() == ext.lower():
+                        continue
+                    candidate = os.path.join(root_dir, name_no_ext + e)
+                    if os.path.exists(candidate) and os.path.isfile(candidate):
+                        return candidate
+            else:
+                for e in common_exts:
+                    candidate = os.path.join(root_dir, name_no_ext + e)
+                    if os.path.exists(candidate) and os.path.isfile(candidate):
+                        return candidate
+            try:
+                for fname in os.listdir(root_dir):
+                    if name_no_ext in fname and os.path.isfile(os.path.join(root_dir, fname)):
+                        return os.path.join(root_dir, fname)
+            except Exception:
+                pass
+            return None
+
+        image_path = find_image_file(path_img, image_name)
+
+        if image_path is None or not os.path.exists(image_path):
+            if 'NaN' not in (image_name or ''):
                 print(image_path)
+            count += 1
+            candidate_bg = os.path.join(path_img, 'background.jpg')
+            if os.path.exists(candidate_bg) and os.path.isfile(candidate_bg):
+                image_path = candidate_bg
+            else:
+                repo_root = os.path.abspath(os.path.join(
+                    os.path.dirname(__file__), '..', '..'))
+                sample_bg = os.path.join(
+                    repo_root, 'sample_data', 'ner_image', 'background.jpg')
+                if os.path.exists(sample_bg) and os.path.isfile(sample_bg):
+                    image_path = sample_bg
+                else:
+                    image_path = candidate_bg
+
         try:
             image = image_process(image_path, transform)
             image_ti_feat = image_process(image_path, transform_for_ti)
-        except:
+        except Exception:
             count += 1
             image_path_fail = os.path.join(path_img, 'background.jpg')
             image = image_process(image_path_fail, transform)
@@ -386,16 +446,26 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list, max_seq
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join([str(x) for x in tokens]))
-            logger.info("input_ids_external: %s" % " ".join([str(x) for x in input_ids_external]))
-            logger.info("input_ids_origin: %s" % " ".join([str(x) for x in input_ids_origin]))
-            logger.info("input_mask_external: %s" % " ".join([str(x) for x in input_mask_external]))
-            logger.info("input_mask_origin: %s" % " ".join([str(x) for x in input_mask_origin]))
-            logger.info("segment_ids_external: %s" % " ".join([str(x) for x in segment_ids_external]))
-            logger.info("segment_ids_origin: %s" % " ".join([str(x) for x in segment_ids_origin]))
-            logger.info("label_external: %s" % " ".join([str(x) for x in label_ids_external]))
-            logger.info("label_origin: %s" % " ".join([str(x) for x in label_ids_origin]))
-            logger.info("auxlabel_external: %s" % " ".join([str(x) for x in auxlabel_ids_external]))
-            logger.info("auxlabel_origin: %s" % " ".join([str(x) for x in auxlabel_ids_origin]))
+            logger.info("input_ids_external: %s" %
+                        " ".join([str(x) for x in input_ids_external]))
+            logger.info("input_ids_origin: %s" %
+                        " ".join([str(x) for x in input_ids_origin]))
+            logger.info("input_mask_external: %s" %
+                        " ".join([str(x) for x in input_mask_external]))
+            logger.info("input_mask_origin: %s" %
+                        " ".join([str(x) for x in input_mask_origin]))
+            logger.info("segment_ids_external: %s" %
+                        " ".join([str(x) for x in segment_ids_external]))
+            logger.info("segment_ids_origin: %s" %
+                        " ".join([str(x) for x in segment_ids_origin]))
+            logger.info("label_external: %s" % " ".join(
+                [str(x) for x in label_ids_external]))
+            logger.info("label_origin: %s" % " ".join(
+                [str(x) for x in label_ids_origin]))
+            logger.info("auxlabel_external: %s" % " ".join(
+                [str(x) for x in auxlabel_ids_external]))
+            logger.info("auxlabel_origin: %s" % " ".join(
+                [str(x) for x in auxlabel_ids_origin]))
 
         features.append(
             SBInputFeatures(
@@ -423,16 +493,17 @@ if __name__ == "__main__":
     processor = MNERProcessor()
     label_list = processor.get_labels()
     auxlabel_list = processor.get_auxlabels()
-    num_labels = len(label_list) + 1  # label 0 corresponds to padding, label in label_list starts from 1
-
+    # label 0 corresponds to padding, label in label_list starts from 1
+    num_labels = len(label_list) + 1
 
     start_label_id = processor.get_start_label_id()
     stop_label_id = processor.get_stop_label_id()
 
     data_dir = r'sample_data'
     train_examples = processor.get_train_examples(data_dir)
-    
-    tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base-v2',cache_dir='cache')
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        'vinai/phobert-base-v2', cache_dir='cache')
     out = convert_mm_examples_to_features(
         train_examples, label_list, auxlabel_list, max_seq_length=512, tokenizer=tokenizer, crop_size=224, path_img=data_dir+"/ner_image"
     )
