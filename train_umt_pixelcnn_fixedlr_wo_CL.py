@@ -477,8 +477,10 @@ sigma = args.sigma
 
 
 if args.do_train:
-    train_dataloader_save_path = args.data_dir+ "/train_dataloader_dataset.pth"
-    dev_dataloader_save_path = args.data_dir+ "/dev_dataloader_dataset.pth"
+    # Save dataloader caches under the output directory (writeable) to avoid
+    # trying to write into read-only input folders (e.g. /kaggle/input/...)
+    train_dataloader_save_path = os.path.join(args.output_dir, "train_dataloader_dataset.pth")
+    dev_dataloader_save_path = os.path.join(args.output_dir, "dev_dataloader_dataset.pth")
     if not os.path.exists(train_dataloader_save_path):
         train_features = convert_mm_examples_to_features(
             train_examples, label_list, auxlabel_list, args.max_seq_length, tokenizer, args.crop_size, args.path_image)
@@ -495,7 +497,7 @@ if args.do_train:
         torch.save(train_data, train_dataloader_save_path)
     else:
         print("Loading the train_data (TensorDataset)")
-        train_data = torch.load(train_dataloader_save_path, weights_only=False)
+        train_data = torch.load(train_dataloader_save_path)
     if args.local_rank == -1:
         train_sampler = RandomSampler(train_data)
     else:
@@ -520,7 +522,7 @@ if args.do_train:
         torch.save(dev_eval_data, dev_dataloader_save_path)
     else:
         print("Loading the dev_dataloader_save_path (TensorDataset)")
-        dev_eval_data = torch.load(dev_dataloader_save_path, weights_only=False)
+        dev_eval_data = torch.load(dev_dataloader_save_path)
     # Run prediction for full data
     dev_eval_sampler = SequentialSampler(dev_eval_data)
     dev_eval_dataloader = DataLoader(dev_eval_data, sampler=dev_eval_sampler, batch_size=args.eval_batch_size)
@@ -685,7 +687,7 @@ else:
 
 if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
     eval_examples = processor.get_test_examples(args.data_dir)
-    test_dataloader_save_path = args.data_dir + "/test_dataloader_dataset.pth"
+    test_dataloader_save_path = os.path.join(args.output_dir, "test_dataloader_dataset.pth")
     if not os.path.exists(test_dataloader_save_path):
         eval_features = convert_mm_examples_to_features(
             eval_examples, label_list, auxlabel_list, args.max_seq_length, tokenizer, args.crop_size, args.path_image)
@@ -706,7 +708,7 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
         torch.save(eval_data, test_dataloader_save_path)
     else:
         print("Loading the test_dataloader_save_path (TensorDataset)")
-        eval_data = torch.load(test_dataloader_save_path, weights_only=False)
+        eval_data = torch.load(test_dataloader_save_path)
     # Run prediction for full data
     eval_sampler = SequentialSampler(eval_data)
     eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)

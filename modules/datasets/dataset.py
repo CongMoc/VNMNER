@@ -85,10 +85,10 @@ def sbreadfile(filename):
         splits = line.split('\t')
         sentence.append(splits[0])
         cur_label = splits[-1][:-1]
-        # if cur_label == 'B-OTHER':
-        #     cur_label = 'B-MISC'
-        # elif cur_label == 'I-OTHER':
-        #     cur_label = 'I-MISC'
+        if cur_label == 'B-OTHER':
+            cur_label = 'B-MISC'
+        elif cur_label == 'I-OTHER':
+            cur_label = 'I-MISC'
         label.append(cur_label)
         auxlabel.append(cur_label[0])
 
