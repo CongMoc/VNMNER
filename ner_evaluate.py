@@ -3,31 +3,77 @@ import numpy as np
 
 def get_chunks(seq, tags):
     """
-    tags: dict like {'O': 4, 'B-PER': 1, 'I-PER': 2, ...}
-    Args:
-        seq: [4, 4, 0, 0, ...] sequence of labels
-        tags: dict["O"] = 4
-    Returns:
-        list of (chunk_type, chunk_start, chunk_end)
-    Example:
-        seq = [4, 5, 0, 3]
-        tags = {"B-PER": 4, "I-PER": 5, "B-LOC": 3, "O": 0}
-        result = [("PER", 0, 2), ("LOC", 3, 4)]
+    Robust chunk extraction supporting two forms of `tags`:
+      - tag2idx: {'O': 4, 'B-PER': 1, ...}
+      - idx2tag: {0: 'O', 1: 'B-PER', ...}
+
+    Returns list of (chunk_type, chunk_start, chunk_end)
     """
-    default = tags['O']
-    idx_to_tag = {idx: tag for tag, idx in tags.items()}
+    # Detect whether tags is tag->idx or idx->tag
+    is_tag2idx = False
+    is_idx2tag = False
+    try:
+        # simple heuristic: if any key is a string and value is int => tag2idx
+        if any(isinstance(k, str) for k in tags.keys()) and any(isinstance(v, int) for v in tags.values()):
+            is_tag2idx = True
+        if any(isinstance(k, int) for k in tags.keys()) and any(isinstance(v, str) for v in tags.values()):
+            is_idx2tag = True
+    except Exception:
+        pass
+
+    if is_tag2idx:
+        tag2idx = tags
+        idx_to_tag = {idx: tag for tag, idx in tag2idx.items()}
+        # find default index for 'O'
+        if 'O' in tag2idx:
+            default = tag2idx['O']
+        else:
+            # try common alternatives
+            default = tag2idx.get('0') or tag2idx.get('o') if isinstance(tag2idx.get('0'), int) else None
+            if default is None:
+                # try to find tag whose type part is 'O'
+                for tag, idx in tag2idx.items():
+                    if isinstance(tag, str) and tag.split('-')[-1].upper() == 'O':
+                        default = idx
+                        break
+            if default is None:
+                # fallback to 0
+                default = 0
+    elif is_idx2tag:
+        idx_to_tag = tags
+        # find index for 'O' in values
+        default = None
+        for idx, tag in idx_to_tag.items():
+            if isinstance(tag, str) and tag == 'O':
+                default = idx
+                break
+        if default is None:
+            for idx, tag in idx_to_tag.items():
+                if isinstance(tag, str) and tag.split('-')[-1].upper() == 'O':
+                    default = idx
+                    break
+        if default is None:
+            default = 0
+    else:
+        # Unknown mapping shape; try to treat as tag->idx by default
+        try:
+            idx_to_tag = {idx: tag for tag, idx in tags.items()}
+            default = tags.get('O', tags.get('0', 0))
+        except Exception:
+            idx_to_tag = {}
+            default = 0
+
     chunks = []
     chunk_type, chunk_start = None, None
 
     for i, tok in enumerate(seq):
-        # Skip padding tokens
+        # Skip tokens not present in idx_to_tag (padding or unknown)
         if tok not in idx_to_tag:
             continue
 
-        # End of a chunk
+        # End of a chunk: token equals default 'O'
         if tok == default and chunk_type is not None:
-            chunk = (chunk_type, chunk_start, i)
-            chunks.append(chunk)
+            chunks.append((chunk_type, chunk_start, i))
             chunk_type, chunk_start = None, None
 
         # Process non-default tokens
@@ -36,29 +82,28 @@ def get_chunks(seq, tags):
             if chunk_type is None:
                 chunk_type, chunk_start = tok_chunk_type, i
             elif tok_chunk_type != chunk_type or tok_chunk_class == "B":
-                chunk = (chunk_type, chunk_start, i)
-                chunks.append(chunk)
+                chunks.append((chunk_type, chunk_start, i))
                 chunk_type, chunk_start = tok_chunk_type, i
 
     # Add final chunk if any
     if chunk_type is not None:
-        chunk = (chunk_type, chunk_start, len(seq))
-        chunks.append(chunk)
+        chunks.append((chunk_type, chunk_start, len(seq)))
 
     return chunks
 
 def get_chunk_type(tok, idx_to_tag):
-	"""
-	Args:
-		tok: id of token, such as 4
-		idx_to_tag: dictionary {4: "B-PER", ...}
-	Returns:
-		tuple: "B", "PER"
-	"""
-	tag_name = idx_to_tag[tok]
-	tag_class = tag_name.split('-')[0]
-	tag_type = tag_name.split('-')[-1]
-	return tag_class, tag_type
+    """
+    Args:
+        tok: id of token, e.g. 4
+        idx_to_tag: dictionary mapping id->tag string
+    Returns:
+        tuple: (class, type) e.g. ("B", "PER")
+    """
+    tag_name = idx_to_tag.get(tok, 'O')
+    parts = tag_name.split('-') if isinstance(tag_name, str) else ['O']
+    tag_class = parts[0] if len(parts) >= 1 else 'O'
+    tag_type = parts[-1] if len(parts) >= 2 else parts[0]
+    return tag_class, tag_type
 
 # def run_evaluate(self, sess, test, tags):
 def evaluate(labels_pred, labels,words,tags):
