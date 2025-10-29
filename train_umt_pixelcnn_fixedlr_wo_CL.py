@@ -698,23 +698,47 @@ if args.do_train:
         # Debug information
         logger.info(f"Total predictions collected: {len(y_pred)}")
         logger.info(f"Total true labels collected: {len(y_true)}")
-        
+
         # Additional debug: check if lists are actually empty despite having length
         if len(y_pred) > 0:
-            logger.info(f"Sample y_pred[0]: {y_pred[0] if y_pred[0] else 'EMPTY SEQUENCE'}")
-            logger.info(f"Sample y_true[0]: {y_true[0] if y_true[0] else 'EMPTY SEQUENCE'}")
-        
+            logger.info(
+                f"Sample y_pred[0]: {y_pred[0] if y_pred[0] else 'EMPTY SEQUENCE'}")
+            logger.info(
+                f"Sample y_true[0]: {y_true[0] if y_true[0] else 'EMPTY SEQUENCE'}")
+
         # Check for empty sequences inside the lists
         non_empty_count = sum(1 for seq in y_pred if len(seq) > 0)
-        logger.info(f"Non-empty sequences in y_pred: {non_empty_count}/{len(y_pred)}")
+        logger.info(
+            f"Non-empty sequences in y_pred: {non_empty_count}/{len(y_pred)}")
 
         if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
             # Additional check: ensure sequences inside are not empty
             y_true_filtered = [seq for seq in y_true if len(seq) > 0]
             y_pred_filtered = [seq for seq in y_pred if len(seq) > 0]
-            
+
             if len(y_true_filtered) > 0 and len(y_pred_filtered) > 0:
-                report = classification_report(y_true_filtered, y_pred_filtered, digits=4)
+                # helper: determine whether sequences contain any entity labels
+                def _contains_entity_labels(seqs):
+                    non_entity = {"O", "X", "<s>", "</s>", "<pad>"}
+                    for seq in seqs:
+                        for lab in seq:
+                            if lab not in non_entity:
+                                return True
+                    return False
+
+                if not _contains_entity_labels(y_true_filtered) and not _contains_entity_labels(y_pred_filtered):
+                    # No entity labels present - seqeval will fail on empty target names
+                    logger.warning(
+                        "No entity labels present in dev predictions; skipping classification_report.")
+                    report = "No entity labels"
+                else:
+                    try:
+                        report = classification_report(
+                            y_true_filtered, y_pred_filtered, digits=4)
+                    except ValueError as e:
+                        logger.warning(
+                            f"classification_report failed: {e}. Skipping report.")
+                        report = "classification_report error"
                 sentence_list = []
                 dev_data, imgs, _ = processor._read_sbtsv(
                     os.path.join(args.data_dir, "dev.txt"))
@@ -739,7 +763,8 @@ if args.do_train:
                     encoder_to_save = encoder.module if hasattr(encoder,
                                                                 'module') else encoder  # Only save the model it-self
                     torch.save(model_to_save.state_dict(), output_model_file)
-                    torch.save(encoder_to_save.state_dict(), output_encoder_file)
+                    torch.save(encoder_to_save.state_dict(),
+                               output_encoder_file)
                     with open(output_config_file, 'w') as f:
                         f.write(model_to_save.config.to_json_string())
                     label_map_save = {i: label for i,
@@ -872,23 +897,46 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
     # Debug information
     logger.info(f"Total test predictions collected: {len(y_pred)}")
     logger.info(f"Total test true labels collected: {len(y_true)}")
-    
+
     # Additional debug: check if lists are actually empty despite having length
     if len(y_pred) > 0:
-        logger.info(f"Sample test y_pred[0]: {y_pred[0] if y_pred[0] else 'EMPTY SEQUENCE'}")
-        logger.info(f"Sample test y_true[0]: {y_true[0] if y_true[0] else 'EMPTY SEQUENCE'}")
-    
+        logger.info(
+            f"Sample test y_pred[0]: {y_pred[0] if y_pred[0] else 'EMPTY SEQUENCE'}")
+        logger.info(
+            f"Sample test y_true[0]: {y_true[0] if y_true[0] else 'EMPTY SEQUENCE'}")
+
     # Check for empty sequences inside the lists
     non_empty_count = sum(1 for seq in y_pred if len(seq) > 0)
-    logger.info(f"Non-empty sequences in test y_pred: {non_empty_count}/{len(y_pred)}")
+    logger.info(
+        f"Non-empty sequences in test y_pred: {non_empty_count}/{len(y_pred)}")
 
     if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
         # Additional check: ensure sequences inside are not empty
         y_true_filtered = [seq for seq in y_true if len(seq) > 0]
         y_pred_filtered = [seq for seq in y_pred if len(seq) > 0]
-        
+
         if len(y_true_filtered) > 0 and len(y_pred_filtered) > 0:
-            report = classification_report(y_true_filtered, y_pred_filtered, digits=4)
+            # helper: determine whether sequences contain any entity labels
+            def _contains_entity_labels(seqs):
+                non_entity = {"O", "X", "<s>", "</s>", "<pad>"}
+                for seq in seqs:
+                    for lab in seq:
+                        if lab not in non_entity:
+                            return True
+                return False
+
+            if not _contains_entity_labels(y_true_filtered) and not _contains_entity_labels(y_pred_filtered):
+                logger.warning(
+                    "No entity labels present in test predictions; skipping classification_report.")
+                report = "No entity labels"
+            else:
+                try:
+                    report = classification_report(
+                        y_true_filtered, y_pred_filtered, digits=4)
+                except ValueError as e:
+                    logger.warning(
+                        f"classification_report failed: {e}. Skipping report.")
+                    report = "classification_report error"
 
             sentence_list = []
             test_data, imgs, _ = processor._read_sbtsv(
@@ -907,12 +955,14 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
                 fout.write(' '.join(samp_true_label) + '\n' + '\n')
             fout.close()
 
-            reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
+            reverse_label_map = {label: i for i,
+                                 label in enumerate(label_list, 1)}
             acc, f1, p, r = evaluate(y_pred_idx, y_true_idx,
                                      sentence_list, reverse_label_map)
             print("Overall: ", p, r, f1)
 
-            output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+            output_eval_file = os.path.join(
+                args.output_dir, "eval_results.txt")
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Test Eval results *****")
                 logger.info("\n%s", report)
