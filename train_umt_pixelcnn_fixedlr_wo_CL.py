@@ -746,10 +746,45 @@ if args.do_train:
                     sentence = dev_data[i][0]
                     sentence_list.append(sentence)
 
-                reverse_label_map = {i: label for i,
-                                     label in enumerate(label_list, 1)}
+                # build a robust idx->label mapping covering all ids present in predictions/labels
+                all_ids = set(
+                    [lab_id for seq in (y_true_idx + y_pred_idx) for lab_id in seq])
+                idx_to_label = {}
+                # map known labels from label_list (enumerate starting at 1)
+                for i, label in enumerate(label_list, 1):
+                    idx_to_label[i] = label
+                # ensure pad/zero maps to 'O' or '<pad>' if present
+                idx_to_label[0] = idx_to_label.get(0, 'O')
+                # cover any remaining ids found in data by assigning 'O'
+                for id_ in all_ids:
+                    if id_ not in idx_to_label:
+                        idx_to_label[id_] = 'O'
+
+                # debug logs to inspect mapping and sample sequences
+                logger.info(
+                    f"DEBUG idx_to_label sample keys: {list(idx_to_label.items())[:20]}")
+                if len(y_true_idx) > 0:
+                    mapped_true_sample = [
+                        [idx_to_label.get(x, 'O') for x in seq] for seq in y_true_idx[:3]]
+                    logger.info(
+                        f"DEBUG mapped y_true sample (first 3): {mapped_true_sample}")
+                if len(y_pred_idx) > 0:
+                    mapped_pred_sample = [
+                        [idx_to_label.get(x, 'O') for x in seq] for seq in y_pred_idx[:3]]
+                    logger.info(
+                        f"DEBUG mapped y_pred sample (first 3): {mapped_pred_sample}")
+
+                # show unique labels predicted
+                from collections import Counter
+                flat_labels = [lab for seq in mapped_pred_sample for lab in seq] if len(
+                    y_pred_idx) > 0 else []
+                if flat_labels:
+                    logger.info(
+                        f"DEBUG predicted label distribution (sample): {Counter(flat_labels)}")
+
+                # Call evaluate with idx->label mapping (get_chunks supports idx2tag)
                 acc, f1, p, r = evaluate(
-                    y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
+                    y_pred_idx, y_true_idx, sentence_list, idx_to_label)
 
                 logger.info("***** Dev Eval results *****")
                 logger.info("\n%s", report)
@@ -944,21 +979,88 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             output_pred_file = os.path.join(args.output_dir, "mtmner_pred.txt")
             fout = open(output_pred_file, 'w')
             for i in range(len(y_pred)):
-                sentence = test_data[i][0]
-                sentence_list.append(sentence)
-                img = imgs[i]
+                raw_sent = test_data[i][0]
+                # Normalize raw_sent into tokens list. raw_sent formats supported:
+                # - list of tokens
+                # - list alternating token,label,token,label,...
+                # - single string with tokens
+                if isinstance(raw_sent, str):
+                    tokens = raw_sent.split()
+                elif isinstance(raw_sent, (list, tuple)):
+                    tokens = list(raw_sent)
+                else:
+                    tokens = [str(x) for x in raw_sent]
+
                 samp_pred_label = y_pred[i]
                 samp_true_label = y_true[i]
+
+                # If tokens look like alternating token/label pairs, extract tokens at even indices
+                if len(tokens) == 2 * len(samp_pred_label):
+                    tokens_clean = tokens[0::2]
+                elif len(tokens) == len(samp_pred_label):
+                    tokens_clean = tokens
+                else:
+                    # Heuristic: filter out label-like items (e.g. 'O', 'B-PER', 'I-LOC', 'X', '<s>')
+                    def _looks_like_label(s):
+                        if not isinstance(s, str):
+                            return False
+                        if s == 'O' or s == 'X' or s in ('<s>', '</s>', '<pad>'):
+                            return True
+                        if '-' in s:
+                            parts = s.split('-')
+                            if parts[0] in ('B', 'I'):
+                                return True
+                        return False
+
+                    filtered = [t for t in tokens if not _looks_like_label(t)]
+                    # If filtered matches label length use it, else fallback to splitting joined string
+                    if len(filtered) == len(samp_pred_label) and len(filtered) > 0:
+                        tokens_clean = filtered
+                    else:
+                        joined = ' '.join(tokens)
+                        tokens_clean = joined.split()[:len(samp_pred_label)]
+
+                sentence_list.append(tokens_clean)
+                img = imgs[i]
                 fout.write(img + '\n')
-                fout.write(' '.join(sentence) + '\n')
+                fout.write(' '.join(tokens_clean) + '\n')
                 fout.write(' '.join(samp_pred_label) + '\n')
                 fout.write(' '.join(samp_true_label) + '\n' + '\n')
             fout.close()
 
-            reverse_label_map = {label: i for i,
-                                 label in enumerate(label_list, 1)}
-            acc, f1, p, r = evaluate(y_pred_idx, y_true_idx,
-                                     sentence_list, reverse_label_map)
+            # build a robust idx->label mapping covering all ids present in predictions/labels
+            all_ids = set([lab_id for seq in (y_true_idx + y_pred_idx)
+                          for lab_id in seq])
+            idx_to_label = {}
+            for i, label in enumerate(label_list, 1):
+                idx_to_label[i] = label
+            idx_to_label[0] = idx_to_label.get(0, 'O')
+            for id_ in all_ids:
+                if id_ not in idx_to_label:
+                    idx_to_label[id_] = 'O'
+
+            logger.info(
+                f"DEBUG idx_to_label sample keys (test): {list(idx_to_label.items())[:20]}")
+            if len(y_true_idx) > 0:
+                mapped_true_sample = [
+                    [idx_to_label.get(x, 'O') for x in seq] for seq in y_true_idx[:3]]
+                logger.info(
+                    f"DEBUG mapped test y_true sample (first 3): {mapped_true_sample}")
+            if len(y_pred_idx) > 0:
+                mapped_pred_sample = [
+                    [idx_to_label.get(x, 'O') for x in seq] for seq in y_pred_idx[:3]]
+                logger.info(
+                    f"DEBUG mapped test y_pred sample (first 3): {mapped_pred_sample}")
+
+            from collections import Counter
+            flat_labels = [lab for seq in mapped_pred_sample for lab in seq] if len(
+                y_pred_idx) > 0 else []
+            if flat_labels:
+                logger.info(
+                    f"DEBUG predicted label distribution test (sample): {Counter(flat_labels)}")
+
+            acc, f1, p, r = evaluate(
+                y_pred_idx, y_true_idx, sentence_list, idx_to_label)
             print("Overall: ", p, r, f1)
 
             output_eval_file = os.path.join(
