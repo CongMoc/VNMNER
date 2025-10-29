@@ -698,45 +698,59 @@ if args.do_train:
         # Debug information
         logger.info(f"Total predictions collected: {len(y_pred)}")
         logger.info(f"Total true labels collected: {len(y_true)}")
+        
+        # Additional debug: check if lists are actually empty despite having length
+        if len(y_pred) > 0:
+            logger.info(f"Sample y_pred[0]: {y_pred[0] if y_pred[0] else 'EMPTY SEQUENCE'}")
+            logger.info(f"Sample y_true[0]: {y_true[0] if y_true[0] else 'EMPTY SEQUENCE'}")
+        
+        # Check for empty sequences inside the lists
+        non_empty_count = sum(1 for seq in y_pred if len(seq) > 0)
+        logger.info(f"Non-empty sequences in y_pred: {non_empty_count}/{len(y_pred)}")
 
         if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
-            report = classification_report(y_true, y_pred, digits=4)
-            sentence_list = []
-            dev_data, imgs, _ = processor._read_sbtsv(
-                os.path.join(args.data_dir, "dev.txt"))
-            for i in range(len(y_pred)):
-                sentence = dev_data[i][0]
-                sentence_list.append(sentence)
+            # Additional check: ensure sequences inside are not empty
+            y_true_filtered = [seq for seq in y_true if len(seq) > 0]
+            y_pred_filtered = [seq for seq in y_pred if len(seq) > 0]
+            
+            if len(y_true_filtered) > 0 and len(y_pred_filtered) > 0:
+                report = classification_report(y_true_filtered, y_pred_filtered, digits=4)
+                sentence_list = []
+                dev_data, imgs, _ = processor._read_sbtsv(
+                    os.path.join(args.data_dir, "dev.txt"))
+                for i in range(len(y_pred)):
+                    sentence = dev_data[i][0]
+                    sentence_list.append(sentence)
 
-            reverse_label_map = {label: i for i,
-                                 label in enumerate(label_list, 1)}
-            acc, f1, p, r = evaluate(
-                y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
+                reverse_label_map = {i: label for i,
+                                     label in enumerate(label_list, 1)}
+                acc, f1, p, r = evaluate(
+                    y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
 
-            logger.info("***** Dev Eval results *****")
-            logger.info("\n%s", report)
-            print("Overall: ", p, r, f1)
-            F_score_dev = f1
+                logger.info("***** Dev Eval results *****")
+                logger.info("\n%s", report)
+                print("Overall: ", p, r, f1)
+                F_score_dev = f1
 
-            if F_score_dev >= max_dev_f1:
-                # Save a trained model and the associated configuration
-                model_to_save = model.module if hasattr(
-                    model, 'module') else model  # Only save the model it-self
-                encoder_to_save = encoder.module if hasattr(encoder,
-                                                            'module') else encoder  # Only save the model it-self
-                torch.save(model_to_save.state_dict(), output_model_file)
-                torch.save(encoder_to_save.state_dict(), output_encoder_file)
-                with open(output_config_file, 'w') as f:
-                    f.write(model_to_save.config.to_json_string())
-                label_map_save = {i: label for i,
-                                  label in enumerate(label_list, 1)}
-                model_config = {"bert_model": args.bert_model, "best_epoch": best_dev_epoch, "max_f1": max_dev_f1, "do_lower": args.do_lower_case,
-                                "max_seq_length": args.max_seq_length, "num_labels": len(label_list) + 1,
-                                "label_map": label_map_save}
-                json.dump(model_config, open(os.path.join(
-                    args.output_dir, "model_config.json"), "w"))
-                max_dev_f1 = F_score_dev
-                best_dev_epoch = train_idx
+                if F_score_dev >= max_dev_f1:
+                    # Save a trained model and the associated configuration
+                    model_to_save = model.module if hasattr(
+                        model, 'module') else model  # Only save the model it-self
+                    encoder_to_save = encoder.module if hasattr(encoder,
+                                                                'module') else encoder  # Only save the model it-self
+                    torch.save(model_to_save.state_dict(), output_model_file)
+                    torch.save(encoder_to_save.state_dict(), output_encoder_file)
+                    with open(output_config_file, 'w') as f:
+                        f.write(model_to_save.config.to_json_string())
+                    label_map_save = {i: label for i,
+                                      label in enumerate(label_list, 1)}
+                    model_config = {"bert_model": args.bert_model, "best_epoch": best_dev_epoch, "max_f1": max_dev_f1, "do_lower": args.do_lower_case,
+                                    "max_seq_length": args.max_seq_length, "num_labels": len(label_list) + 1,
+                                    "label_map": label_map_save}
+                    json.dump(model_config, open(os.path.join(
+                        args.output_dir, "model_config.json"), "w"))
+                    max_dev_f1 = F_score_dev
+                    best_dev_epoch = train_idx
         else:
             logger.warning(
                 "***** WARNING: No valid predictions found in dev set! *****")
@@ -858,39 +872,53 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
     # Debug information
     logger.info(f"Total test predictions collected: {len(y_pred)}")
     logger.info(f"Total test true labels collected: {len(y_true)}")
+    
+    # Additional debug: check if lists are actually empty despite having length
+    if len(y_pred) > 0:
+        logger.info(f"Sample test y_pred[0]: {y_pred[0] if y_pred[0] else 'EMPTY SEQUENCE'}")
+        logger.info(f"Sample test y_true[0]: {y_true[0] if y_true[0] else 'EMPTY SEQUENCE'}")
+    
+    # Check for empty sequences inside the lists
+    non_empty_count = sum(1 for seq in y_pred if len(seq) > 0)
+    logger.info(f"Non-empty sequences in test y_pred: {non_empty_count}/{len(y_pred)}")
 
     if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
-        report = classification_report(y_true, y_pred, digits=4)
+        # Additional check: ensure sequences inside are not empty
+        y_true_filtered = [seq for seq in y_true if len(seq) > 0]
+        y_pred_filtered = [seq for seq in y_pred if len(seq) > 0]
+        
+        if len(y_true_filtered) > 0 and len(y_pred_filtered) > 0:
+            report = classification_report(y_true_filtered, y_pred_filtered, digits=4)
 
-        sentence_list = []
-        test_data, imgs, _ = processor._read_sbtsv(
-            os.path.join(args.data_dir, "test.txt"))
-        output_pred_file = os.path.join(args.output_dir, "mtmner_pred.txt")
-        fout = open(output_pred_file, 'w')
-        for i in range(len(y_pred)):
-            sentence = test_data[i][0]
-            sentence_list.append(sentence)
-            img = imgs[i]
-            samp_pred_label = y_pred[i]
-            samp_true_label = y_true[i]
-            fout.write(img + '\n')
-            fout.write(' '.join(sentence) + '\n')
-            fout.write(' '.join(samp_pred_label) + '\n')
-            fout.write(' '.join(samp_true_label) + '\n' + '\n')
-        fout.close()
+            sentence_list = []
+            test_data, imgs, _ = processor._read_sbtsv(
+                os.path.join(args.data_dir, "test.txt"))
+            output_pred_file = os.path.join(args.output_dir, "mtmner_pred.txt")
+            fout = open(output_pred_file, 'w')
+            for i in range(len(y_pred)):
+                sentence = test_data[i][0]
+                sentence_list.append(sentence)
+                img = imgs[i]
+                samp_pred_label = y_pred[i]
+                samp_true_label = y_true[i]
+                fout.write(img + '\n')
+                fout.write(' '.join(sentence) + '\n')
+                fout.write(' '.join(samp_pred_label) + '\n')
+                fout.write(' '.join(samp_true_label) + '\n' + '\n')
+            fout.close()
 
-        reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
-        acc, f1, p, r = evaluate(y_pred_idx, y_true_idx,
-                                 sentence_list, reverse_label_map)
-        print("Overall: ", p, r, f1)
+            reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
+            acc, f1, p, r = evaluate(y_pred_idx, y_true_idx,
+                                     sentence_list, reverse_label_map)
+            print("Overall: ", p, r, f1)
 
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Test Eval results *****")
-            logger.info("\n%s", report)
-            writer.write(report)
-            writer.write("Overall: " + str(p) + ' ' +
-                         str(r) + ' ' + str(f1) + '\n')
+            output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+            with open(output_eval_file, "w") as writer:
+                logger.info("***** Test Eval results *****")
+                logger.info("\n%s", report)
+                writer.write(report)
+                writer.write("Overall: " + str(p) + ' ' +
+                             str(r) + ' ' + str(f1) + '\n')
     else:
         logger.warning(
             "***** WARNING: No valid predictions found in test set! *****")
