@@ -652,7 +652,7 @@ if args.do_train:
         y_pred_idx = []
         label_map = {i: label for i, label in enumerate(label_list, 1)}
         label_map[0] = "<pad>"
-        
+
         for input_ids, input_mask, added_input_mask, segment_ids, img_feats, image_ti_feat, label_ids, auxlabel_ids in tqdm(
                 dev_eval_dataloader,
                 desc="Evaluating"):
@@ -698,7 +698,7 @@ if args.do_train:
         # Debug information
         logger.info(f"Total predictions collected: {len(y_pred)}")
         logger.info(f"Total true labels collected: {len(y_true)}")
-        
+
         if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
             report = classification_report(y_true, y_pred, digits=4)
             sentence_list = []
@@ -708,7 +708,8 @@ if args.do_train:
                 sentence = dev_data[i][0]
                 sentence_list.append(sentence)
 
-            reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
+            reverse_label_map = {label: i for i,
+                                 label in enumerate(label_list, 1)}
             acc, f1, p, r = evaluate(
                 y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
 
@@ -727,7 +728,8 @@ if args.do_train:
                 torch.save(encoder_to_save.state_dict(), output_encoder_file)
                 with open(output_config_file, 'w') as f:
                     f.write(model_to_save.config.to_json_string())
-                label_map_save = {i: label for i, label in enumerate(label_list, 1)}
+                label_map_save = {i: label for i,
+                                  label in enumerate(label_list, 1)}
                 model_config = {"bert_model": args.bert_model, "best_epoch": best_dev_epoch, "max_f1": max_dev_f1, "do_lower": args.do_lower_case,
                                 "max_seq_length": args.max_seq_length, "num_labels": len(label_list) + 1,
                                 "label_map": label_map_save}
@@ -736,8 +738,10 @@ if args.do_train:
                 max_dev_f1 = F_score_dev
                 best_dev_epoch = train_idx
         else:
-            logger.warning("***** WARNING: No valid predictions found in dev set! *****")
-            logger.warning(f"y_true length: {len(y_true)}, y_pred length: {len(y_pred)}")
+            logger.warning(
+                "***** WARNING: No valid predictions found in dev set! *****")
+            logger.warning(
+                f"y_true length: {len(y_true)}, y_pred length: {len(y_pred)}")
             logger.warning("Skipping evaluation for this epoch.")
 
     logger.info("**************************************************")
@@ -854,7 +858,7 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
     # Debug information
     logger.info(f"Total test predictions collected: {len(y_pred)}")
     logger.info(f"Total test true labels collected: {len(y_true)}")
-    
+
     if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
         report = classification_report(y_true, y_pred, digits=4)
 
@@ -888,6 +892,8 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             writer.write("Overall: " + str(p) + ' ' +
                          str(r) + ' ' + str(f1) + '\n')
     else:
-        logger.warning("***** WARNING: No valid predictions found in test set! *****")
-        logger.warning(f"y_true length: {len(y_true)}, y_pred length: {len(y_pred)}")
+        logger.warning(
+            "***** WARNING: No valid predictions found in test set! *****")
+        logger.warning(
+            f"y_true length: {len(y_true)}, y_pred length: {len(y_pred)}")
         logger.warning("Test evaluation skipped due to empty predictions.")
