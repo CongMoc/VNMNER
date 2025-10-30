@@ -46,11 +46,11 @@ class SBInputFeatures(object):
 
 def sbreadfile(filename):
     '''
-    read file
-    return format :
-    [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
+    Robust reader for token-per-line files. Handles IMGID lines and both
+    tab- and whitespace-separated token/label formats. Sanitizes tokens and
+    normalizes legacy labels. Does not print debug traces.
     '''
-    print("prepare data for ", filename, flush=True)
+    print("prepare data for ", filename)
     f = open(filename, encoding='utf8')
     data = []
     imgs = []
@@ -59,82 +59,58 @@ def sbreadfile(filename):
     label = []
     auxlabel = []
     imgid = ''
-    a = 0
-    # debug counter for sbreadfile logging
-    sbread_debug_counter = 0
-    for line in f:
+
+    for raw in f:
+        line = raw.rstrip('\n')
         if line.startswith('IMGID:'):
-            raw_id = line.strip().split('IMGID:')[1].strip()
+            raw_id = line.split('IMGID:')[1].strip()
             if raw_id == '':
                 imgid = ''
             else:
                 name_no_ext, ext = os.path.splitext(raw_id)
-                if ext == '':
-                    imgid = raw_id + '.jpg'
-                else:
-                    imgid = raw_id
+                imgid = raw_id if ext != '' else raw_id + '.jpg'
             continue
-        if line[0] == "\n":
+
+        if line.strip() == '':
             if len(sentence) > 0:
                 data.append((sentence, label))
                 imgs.append(imgid)
                 auxlabels.append(auxlabel)
-                # Debug: print first few parsed samples to verify token/label alignment
-                if sbread_debug_counter < 6:
-                    print(
-                        f"[sbreadfile] sample #{len(data)-1} imgid='{imgid}'", flush=True)
-                    print(f"[sbreadfile] tokens={sentence[:100]}", flush=True)
-                    print(f"[sbreadfile] labels={label[:100]}", flush=True)
                 sentence = []
                 label = []
                 imgid = ''
                 auxlabel = []
             continue
-        # Be tolerant to both tab-separated and whitespace-separated input files.
-        raw = line.rstrip('\n')
-        # Try splitting by tab first (preferred). If that yields only one field,
-        # fall back to whitespace splitting so lines like "word LABEL" are handled.
-        splits = raw.split('\t')
-        if len(splits) == 1:
-            parts = raw.split()
-            if len(parts) == 0:
-                continue
-            token = parts[0]
-            cur_label = parts[-1] if len(parts) > 1 else 'O'
-        else:
-            token = splits[0]
-            # take last field as label (robust to extra columns)
-            cur_label = splits[-1].strip() if splits[-1].strip() != '' else 'O'
 
-        sentence.append(token)
-        # remove any stray carriage returns from label and use default 'O' when missing
-        if cur_label.endswith('\r'):
+        if '\t' in line:
+            parts = line.split('\t')
+        else:
+            parts = line.split()
+        if len(parts) == 0:
+            continue
+        token = parts[0]
+        cur_label = parts[-1] if len(parts) > 1 else 'O'
+
+        if isinstance(cur_label, str) and cur_label.endswith('\r'):
             cur_label = cur_label[:-1]
+        if cur_label == 'B-OTHER':
+            cur_label = 'B-MISC'
+        elif cur_label == 'I-OTHER':
+            cur_label = 'I-MISC'
         if cur_label == '':
             cur_label = 'O'
-        # if cur_label == 'B-OTHER':
-        #     cur_label = 'B-MISC'
-        # elif cur_label == 'I-OTHER':
-        #     cur_label = 'I-MISC'
+
+        sentence.append(token)
         label.append(cur_label)
         auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
-
-        # Debug: log the first N parsed token/label lines to help diagnose format issues
-        if sbread_debug_counter < 50:
-            print(
-                f"[sbreadfile-line] token='{token}'  label='{cur_label}'  raw='{raw[:160]}'", flush=True)
-        sbread_debug_counter += 1
 
     if len(sentence) > 0:
         data.append((sentence, label))
         imgs.append(imgid)
         auxlabels.append(auxlabel)
-        sentence = []
-        label = []
-        auxlabel = []
 
-    print("The number of samples: " + str(len(data)), flush=True)
-    print("The number of images: " + str(len(imgs)), flush=True)
+    print("The number of samples: " + str(len(data)))
+    print("The number of images: " + str(len(imgs)))
     return data, imgs, auxlabels
 
 

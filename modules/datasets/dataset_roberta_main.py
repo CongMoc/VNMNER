@@ -3,6 +3,7 @@ from torchvision import transforms
 import torch
 import logging
 import os
+import re
 print(
     f"LOADED modules/datasets/dataset_roberta_main.py from {__file__}", flush=True)
 logger = logging.getLogger(__name__)
@@ -51,9 +52,9 @@ class SBInputFeatures(object):
 
 def sbreadfile(filename):
     '''
-    read file
-    return format :
-    [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
+    Robust reader for token-per-line files. Supports IMGID lines,
+    tab- or whitespace-separated token/label columns, token sanitization
+    and normalization of some legacy labels.
     '''
     print("prepare data for ", filename, flush=True)
     f = open(filename, encoding='utf8')
@@ -64,82 +65,76 @@ def sbreadfile(filename):
     label = []
     auxlabel = []
     imgid = ''
-    a = 0
-    # debug counter for sbreadfile logging
-    sbread_debug_counter = 0
-    for line in f:
+    SPECIAL_TOKENS_LOCAL = ['\ufe0f', '\u200d', '\u200b', '\x92']
+    URL_PREFIX_LOCAL = 'http'
+
+    for raw in f:
+        line = raw.rstrip('\n')
         if line.startswith('IMGID:'):
-            # strip whitespace around the id part to avoid leading/trailing spaces
-            raw_id = line.strip().split('IMGID:')[1].strip()
-            # If IMGID is empty, keep it empty; if it already has an extension, keep as-is,
-            # otherwise append '.jpg'. This avoids creating names like 'foo.jpg.jpg'
+            raw_id = line.split('IMGID:')[1].strip()
             if raw_id == '':
                 imgid = ''
             else:
                 name_no_ext, ext = os.path.splitext(raw_id)
-                if ext == '':
-                    imgid = raw_id + '.jpg'
-                else:
-                    imgid = raw_id
+                imgid = raw_id if ext != '' else raw_id + '.jpg'
             continue
 
-        if line[0] == "\n":
+        if line.strip() == '':
             if len(sentence) > 0:
-                # append collected sentence and labels as-is
                 data.append((sentence, label))
                 imgs.append(imgid)
                 auxlabels.append(auxlabel)
-                # Debug: print first few parsed samples
-                if sbread_debug_counter < 6:
-                    print(
-                        f"[sbreadfile-main] sample #{len(data)-1} imgid='{imgid}'", flush=True)
-                    print(
-                        f"[sbreadfile-main] tokens={sentence[:100]}", flush=True)
-                    print(
-                        f"[sbreadfile-main] labels={label[:100]}", flush=True)
                 sentence = []
                 label = []
                 imgid = ''
                 auxlabel = []
             continue
-        splits = line.rstrip('\n').split('\t')
 
-        token = splits[0] if len(splits) > 0 else ""
-        if token == '' or token.isspace() or token in SPECIAL_TOKENS or token.startswith(URL_PREFIX):
-            token = "<unk>"
-
-        sentence.append(token)
-        # robust label extraction: if missing, default to 'O'
-        if len(splits) >= 2 and splits[-1].strip() != '':
-            cur_label = splits[-1].strip()
+        # prefer tab split but fall back to whitespace
+        if '\t' in line:
+            parts = line.split('\t')
         else:
-            cur_label = 'O'
+            parts = line.split()
+        if len(parts) == 0:
+            continue
+        token = parts[0]
+        cur_label = parts[-1] if len(parts) > 1 else 'O'
 
+        # sanitize token
+        if token == '' or token.isspace() or token in SPECIAL_TOKENS_LOCAL or token.startswith(URL_PREFIX_LOCAL):
+            token = "[UNK]"
+
+        # normalize label
+        if isinstance(cur_label, str) and cur_label.endswith('\r'):
+            cur_label = cur_label[:-1]
         if cur_label == 'B-OTHER':
             cur_label = 'B-MISC'
         elif cur_label == 'I-OTHER':
             cur_label = 'I-MISC'
+        if cur_label == '':
+            cur_label = 'O'
+
+        sentence.append(token)
         label.append(cur_label)
         auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
 
-        # Debug: print per-line parsing for first N lines
-        if sbread_debug_counter < 50:
-            print(
-                f"[sbreadfile-main-line] token='{token}' label='{cur_label}' raw='{line[:160]}'", flush=True)
-        sbread_debug_counter += 1
-
     if len(sentence) > 0:
-        # append final sample as-is
         data.append((sentence, label))
         imgs.append(imgid)
         auxlabels.append(auxlabel)
-        sentence = []
-        label = []
-        auxlabel = []
 
     print("The number of samples: " + str(len(data)), flush=True)
     print("The number of images: " + str(len(imgs)), flush=True)
     return data, imgs, auxlabels
+
+
+def _read_sbtsv(input_file, quotechar=None):
+    """Module-level wrapper kept for backwards compatibility.
+
+    Some callers import the module and call _read_sbtsv(...) directly.
+    Delegate to sbreadfile to parse the file and return (data, imgs, auxlabels).
+    """
+    return sbreadfile(input_file)
 
 
 class DataProcessor(object):

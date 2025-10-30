@@ -46,9 +46,9 @@ class SBInputFeatures(object):
 
 def sbreadfile(filename):
     '''
-    read file
-    return format :
-    [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
+    Robust reader for token-per-line files. Works with tab-separated or
+    whitespace-separated token/label columns and handles IMGID lines.
+    Returns (data, imgs, auxlabels) where data is list of (tokens, labels).
     '''
     print("prepare data for ", filename)
     f = open(filename, encoding='utf8')
@@ -59,20 +59,23 @@ def sbreadfile(filename):
     label = []
     auxlabel = []
     imgid = ''
-    a = 0
-    for line in f:
+    SPECIAL_TOKENS = ['\ufe0f', '\u200d', '\u200b', '\x92']
+    URL_PREFIX = 'http'
+
+    for raw in f:
+        line = raw.rstrip('\n')
+        # IMGID lines
         if line.startswith('IMGID:'):
-            raw_id = line.strip().split('IMGID:')[1].strip()
+            raw_id = line.split('IMGID:')[1].strip()
             if raw_id == '':
                 imgid = ''
             else:
                 name_no_ext, ext = os.path.splitext(raw_id)
-                if ext == '':
-                    imgid = raw_id + '.jpg'
-                else:
-                    imgid = raw_id
+                imgid = raw_id if ext != '' else raw_id + '.jpg'
             continue
-        if line[0] == "\n":
+
+        # sentence boundary (blank line)
+        if line.strip() == '':
             if len(sentence) > 0:
                 data.append((sentence, label))
                 imgs.append(imgid)
@@ -82,28 +85,44 @@ def sbreadfile(filename):
                 imgid = ''
                 auxlabel = []
             continue
-        splits = line.split('\t')
-        sentence.append(splits[0])
-        cur_label = splits[-1][:-1]
+
+        # try tab split first, fall back to whitespace
+        if '\t' in line:
+            parts = line.split('\t')
+        else:
+            parts = line.split()
+        if len(parts) == 0:
+            continue
+        token = parts[0]
+        cur_label = parts[-1] if len(parts) > 1 else 'O'
+
+        # sanitize token
+        if token == '' or token.isspace() or token in SPECIAL_TOKENS or token.startswith(URL_PREFIX):
+            token = "<unk>"
+
+        # normalize some legacy labels
+        if cur_label.endswith('\r'):
+            cur_label = cur_label[:-1]
         if cur_label == 'B-OTHER':
             cur_label = 'B-MISC'
         elif cur_label == 'I-OTHER':
             cur_label = 'I-MISC'
-        label.append(cur_label)
-        auxlabel.append(cur_label[0])
+        if cur_label == '':
+            cur_label = 'O'
 
+        sentence.append(token)
+        label.append(cur_label)
+        auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
+
+    # final sentencehttp://localhost:3001/
     if len(sentence) > 0:
         data.append((sentence, label))
         imgs.append(imgid)
         auxlabels.append(auxlabel)
-        sentence = []
-        label = []
-        auxlabel = []
 
     print("The number of samples: " + str(len(data)))
     print("The number of images: " + str(len(imgs)))
     return data, imgs, auxlabels
-
 
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
