@@ -82,15 +82,34 @@ def sbreadfile(filename):
                 imgid = ''
                 auxlabel = []
             continue
-        splits = line.split('\t')
-        sentence.append(splits[0])
-        cur_label = splits[-1][:-1]
+        # Be tolerant to both tab-separated and whitespace-separated input files.
+        raw = line.rstrip('\n')
+        # Try splitting by tab first (preferred). If that yields only one field,
+        # fall back to whitespace splitting so lines like "word LABEL" are handled.
+        splits = raw.split('\t')
+        if len(splits) == 1:
+            parts = raw.split()
+            if len(parts) == 0:
+                continue
+            token = parts[0]
+            cur_label = parts[-1] if len(parts) > 1 else 'O'
+        else:
+            token = splits[0]
+            # take last field as label (robust to extra columns)
+            cur_label = splits[-1].strip() if splits[-1].strip() != '' else 'O'
+
+        sentence.append(token)
+        # remove any stray carriage returns from label and use default 'O' when missing
+        if cur_label.endswith('\r'):
+            cur_label = cur_label[:-1]
+        if cur_label == '':
+            cur_label = 'O'
         # if cur_label == 'B-OTHER':
         #     cur_label = 'B-MISC'
         # elif cur_label == 'I-OTHER':
         #     cur_label = 'I-MISC'
         label.append(cur_label)
-        auxlabel.append(cur_label[0])
+        auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
 
     if len(sentence) > 0:
         data.append((sentence, label))
