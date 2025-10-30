@@ -60,6 +60,8 @@ def sbreadfile(filename):
     auxlabel = []
     imgid = ''
     a = 0
+    # debug counter for sbreadfile logging
+    sbread_debug_counter = 0
     for line in f:
         if line.startswith('IMGID:'):
             raw_id = line.strip().split('IMGID:')[1].strip()
@@ -77,6 +79,12 @@ def sbreadfile(filename):
                 data.append((sentence, label))
                 imgs.append(imgid)
                 auxlabels.append(auxlabel)
+                # Debug: print first few parsed samples to verify token/label alignment
+                if sbread_debug_counter < 6:
+                    logger.info(
+                        f"[sbreadfile] sample #{len(data)-1} imgid='{imgid}'")
+                    logger.info(f"[sbreadfile] tokens={sentence[:100]}")
+                    logger.info(f"[sbreadfile] labels={label[:100]}")
                 sentence = []
                 label = []
                 imgid = ''
@@ -110,6 +118,12 @@ def sbreadfile(filename):
         #     cur_label = 'I-MISC'
         label.append(cur_label)
         auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
+
+        # Debug: log the first N parsed token/label lines to help diagnose format issues
+        if sbread_debug_counter < 50:
+            logger.debug(
+                f"[sbreadfile-line] token='{token}'  label='{cur_label}'  raw='{raw[:160]}'")
+        sbread_debug_counter += 1
 
     if len(sentence) > 0:
         data.append((sentence, label))
@@ -351,6 +365,12 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
                 else:
                     labels.append("X")
                     auxlabels.append("X")
+        # Debug: print tokenization mapping for the first few examples to verify alignment
+        if ex_index < 5:
+            logger.info(
+                f"[tok] ex_index={ex_index} original_words={textlist[:30]}")
+            logger.info(f"[tok] mapped_tokens={tokens[:60]}")
+            logger.info(f"[tok] mapped_labels={labels[:60]}")
         if len(tokens) >= max_seq_length - 1:
             tokens = tokens[0:(max_seq_length - 2)]
             labels = labels[0:(max_seq_length - 2)]
