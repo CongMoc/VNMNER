@@ -124,6 +124,7 @@ def sbreadfile(filename):
     print("The number of images: " + str(len(imgs)))
     return data, imgs, auxlabels
 
+
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 

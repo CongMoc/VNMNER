@@ -8414,7 +8414,7 @@ trồng O
 cây O
 hưởng O
 ứng O
-Tết B-ORTHER
+Tết B-OTHER
 trồng I-OTHER
 cây I-OTHER
 Xuân I-OTHER
@@ -44200,7 +44200,7 @@ tiết O
 kiệm O
 trên O
 app O
-Easy B-ORTHER
+Easy B-OTHER
 Tour I-OTHER
 N I-OTHER
 và O
