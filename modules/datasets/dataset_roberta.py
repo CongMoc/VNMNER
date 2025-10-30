@@ -50,7 +50,7 @@ def sbreadfile(filename):
     return format :
     [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
     '''
-    print("prepare data for ", filename)
+    print("prepare data for ", filename, flush=True)
     f = open(filename, encoding='utf8')
     data = []
     imgs = []
@@ -81,9 +81,10 @@ def sbreadfile(filename):
                 auxlabels.append(auxlabel)
                 # Debug: print first few parsed samples to verify token/label alignment
                 if sbread_debug_counter < 6:
-                    print(f"[sbreadfile] sample #{len(data)-1} imgid='{imgid}'")
-                    print(f"[sbreadfile] tokens={sentence[:100]}")
-                    print(f"[sbreadfile] labels={label[:100]}")
+                    print(
+                        f"[sbreadfile] sample #{len(data)-1} imgid='{imgid}'", flush=True)
+                    print(f"[sbreadfile] tokens={sentence[:100]}", flush=True)
+                    print(f"[sbreadfile] labels={label[:100]}", flush=True)
                 sentence = []
                 label = []
                 imgid = ''
@@ -120,7 +121,8 @@ def sbreadfile(filename):
 
         # Debug: log the first N parsed token/label lines to help diagnose format issues
         if sbread_debug_counter < 50:
-            print(f"[sbreadfile-line] token='{token}'  label='{cur_label}'  raw='{raw[:160]}'")
+            print(
+                f"[sbreadfile-line] token='{token}'  label='{cur_label}'  raw='{raw[:160]}'", flush=True)
         sbread_debug_counter += 1
 
     if len(sentence) > 0:
@@ -131,8 +133,8 @@ def sbreadfile(filename):
         label = []
         auxlabel = []
 
-    print("The number of samples: " + str(len(data)))
-    print("The number of images: " + str(len(imgs)))
+    print("The number of samples: " + str(len(data)), flush=True)
+    print("The number of images: " + str(len(imgs)), flush=True)
     return data, imgs, auxlabels
 
 
@@ -365,9 +367,10 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
                     auxlabels.append("X")
         # Debug: print tokenization mapping for the first few examples to verify alignment
         if ex_index < 5:
-            print(f"[tok] ex_index={ex_index} original_words={textlist[:30]}")
-            print(f"[tok] mapped_tokens={tokens[:60]}")
-            print(f"[tok] mapped_labels={labels[:60]}")
+            print(
+                f"[tok] ex_index={ex_index} original_words={textlist[:30]}", flush=True)
+            print(f"[tok] mapped_tokens={tokens[:60]}", flush=True)
+            print(f"[tok] mapped_labels={labels[:60]}", flush=True)
         if len(tokens) >= max_seq_length - 1:
             tokens = tokens[0:(max_seq_length - 2)]
             labels = labels[0:(max_seq_length - 2)]
@@ -440,7 +443,7 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
 
         if image_path is None or not os.path.exists(image_path):
             if 'NaN' not in (image_name or ''):
-                print(image_path)
+                print(image_path, flush=True)
             count += 1
             candidate_bg = os.path.join(path_img, 'background.jpg')
             if os.path.exists(candidate_bg) and os.path.isfile(candidate_bg):
@@ -481,7 +484,7 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
             SBInputFeatures(input_ids=input_ids, input_mask=input_mask, added_input_mask=added_input_mask,
                             segment_ids=segment_ids, img_feat=image, label_id=label_ids, auxlabel_id=auxlabel_ids))
 
-    print('the number of problematic samples: ' + str(count))
+    print('the number of problematic samples: ' + str(count), flush=True)
     return features
 
 

@@ -3,6 +3,8 @@ from torchvision import transforms
 import torch
 import logging
 import os
+print(
+    f"LOADED modules/datasets/dataset_roberta_main.py from {__file__}", flush=True)
 logger = logging.getLogger(__name__)
 SPECIAL_TOKENS = ['\ufe0f', '\u200d', '\u200b', '\x92']
 URL_PREFIX = 'http'
@@ -53,7 +55,7 @@ def sbreadfile(filename):
     return format :
     [ ['EU', 'B-ORG'], ['rejects', 'O'], ['German', 'B-MISC'], ['call', 'O'], ['to', 'O'], ['boycott', 'O'], ['British', 'B-MISC'], ['lamb', 'O'], ['.', 'O'] ]
     '''
-    print("prepare data for ", filename)
+    print("prepare data for ", filename, flush=True)
     f = open(filename, encoding='utf8')
     data = []
     imgs = []
@@ -63,6 +65,8 @@ def sbreadfile(filename):
     auxlabel = []
     imgid = ''
     a = 0
+    # debug counter for sbreadfile logging
+    sbread_debug_counter = 0
     for line in f:
         if line.startswith('IMGID:'):
             # strip whitespace around the id part to avoid leading/trailing spaces
@@ -85,6 +89,14 @@ def sbreadfile(filename):
                 data.append((sentence, label))
                 imgs.append(imgid)
                 auxlabels.append(auxlabel)
+                # Debug: print first few parsed samples
+                if sbread_debug_counter < 6:
+                    print(
+                        f"[sbreadfile-main] sample #{len(data)-1} imgid='{imgid}'", flush=True)
+                    print(
+                        f"[sbreadfile-main] tokens={sentence[:100]}", flush=True)
+                    print(
+                        f"[sbreadfile-main] labels={label[:100]}", flush=True)
                 sentence = []
                 label = []
                 imgid = ''
@@ -110,6 +122,12 @@ def sbreadfile(filename):
         label.append(cur_label)
         auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
 
+        # Debug: print per-line parsing for first N lines
+        if sbread_debug_counter < 50:
+            print(
+                f"[sbreadfile-main-line] token='{token}' label='{cur_label}' raw='{line[:160]}'", flush=True)
+        sbread_debug_counter += 1
+
     if len(sentence) > 0:
         # append final sample as-is
         data.append((sentence, label))
@@ -119,8 +137,8 @@ def sbreadfile(filename):
         label = []
         auxlabel = []
 
-    print("The number of samples: " + str(len(data)))
-    print("The number of images: " + str(len(imgs)))
+    print("The number of samples: " + str(len(data)), flush=True)
+    print("The number of images: " + str(len(imgs)), flush=True)
     return data, imgs, auxlabels
 
 
@@ -276,6 +294,14 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
                 else:
                     labels.append("X")
                     auxlabels.append("X")
+
+        # Debug: print tokenization mapping for first few examples to verify alignment
+        if ex_index < 5:
+            print(
+                f"[tok-main] ex_index={ex_index} original_words={textlist[:30]}", flush=True)
+            print(f"[tok-main] mapped_tokens={tokens[:60]}", flush=True)
+            print(f"[tok-main] mapped_labels={labels[:60]}", flush=True)
+
         if len(tokens) >= max_seq_length - 1:
             tokens = tokens[0:(max_seq_length - 2)]
             labels = labels[0:(max_seq_length - 2)]
