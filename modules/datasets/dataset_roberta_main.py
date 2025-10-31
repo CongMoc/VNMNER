@@ -312,8 +312,50 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
         for i, token in enumerate(tokens):
             ntokens.append(token)
             segment_ids.append(0)
-            label_ids.append(label_map[labels[i]])
-            auxlabel_ids.append(auxlabel_map[auxlabels[i]])
+            # Map main label with defensive fallback and logging
+            try:
+                label_ids.append(label_map[labels[i]])
+            except Exception as e:
+                # Unexpected label value (e.g., an image id or malformed token)
+                bad_label = labels[i]
+                info = (f"Unknown label '{bad_label}' at example={example.guid} token_index={i} "
+                        f"token='{token}' img_id='{example.img_id}'\n")
+                print(info, end='', flush=True)
+                try:
+                    with open('unknown_labels.txt', 'a', encoding='utf-8') as f:
+                        f.write(info)
+                except Exception:
+                    # If file write fails, continue without stopping training
+                    pass
+
+                # Heuristic fallback: prefer 'O' if present, otherwise create a safe mapping
+                if 'O' in label_map:
+                    label_ids.append(label_map['O'])
+                else:
+                    new_id = len(label_map) + 1
+                    label_map[bad_label] = new_id
+                    label_ids.append(new_id)
+
+            # Map auxiliary label with defensive fallback
+            try:
+                auxlabel_ids.append(auxlabel_map[auxlabels[i]])
+            except Exception:
+                bad_aux = auxlabels[i]
+                info2 = (f"Unknown auxlabel '{bad_aux}' at example={example.guid} token_index={i} "
+                         f"token='{token}' img_id='{example.img_id}'\n")
+                print(info2, end='', flush=True)
+                try:
+                    with open('unknown_auxlabels.txt', 'a', encoding='utf-8') as f:
+                        f.write(info2)
+                except Exception:
+                    pass
+
+                if 'O' in auxlabel_map:
+                    auxlabel_ids.append(auxlabel_map['O'])
+                else:
+                    new_aid = len(auxlabel_map) + 1
+                    auxlabel_map[bad_aux] = new_aid
+                    auxlabel_ids.append(new_aid)
         ntokens.append("</s>")
         segment_ids.append(0)
         label_ids.append(label_map["</s>"])
