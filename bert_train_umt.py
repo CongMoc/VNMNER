@@ -522,7 +522,17 @@ if args.do_train:
                 y_pred_idx.append(tmp2_idx)
 
 
-        report = classification_report(y_true, y_pred, digits=4)
+        logger.info("Total predictions collected: %d", len(y_pred))
+        logger.info("Total true labels collected: %d", len(y_true))
+        if y_true and y_pred and any(len(s) > 0 for s in y_true):
+            try:
+                report = classification_report(y_true, y_pred, digits=4)
+            except ValueError as e:
+                logger.warning("classification_report failed: %s. Skipping report.", str(e))
+                report = "classification_report error"
+        else:
+            logger.warning("No labeled tokens found in dev predictions; skipping classification_report.")
+            report = ""
         sentence_list = []
         dev_data, imgs, _ = processor._read_sbtsv(os.path.join(args.data_dir, "dev.txt"))
         for i in range(len(y_pred)):
@@ -646,7 +656,27 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             y_pred_idx.append(tmp2_idx)
 
 
-    report = classification_report(y_true, y_pred, digits=4)
+    logger.info("Total predictions collected: %d", len(y_pred))
+    logger.info("Total true labels collected: %d", len(y_true))
+    if y_true and y_pred and any(len(s) > 0 for s in y_true):
+        try:
+            logger.info("Total test predictions collected: %d", len(y_pred))
+            logger.info("Total test true labels collected: %d", len(y_true))
+            if y_true and y_pred and any(len(s) > 0 for s in y_true):
+                try:
+                    report = classification_report(y_true, y_pred, digits=4)
+                except ValueError as e:
+                    logger.warning("classification_report failed on test set: %s. Skipping report.", str(e))
+                    report = "classification_report error"
+            else:
+                logger.warning("No labeled tokens found in test predictions; skipping classification_report.")
+                report = ""
+        except ValueError as e:
+            logger.warning("classification_report failed: %s. Skipping report.", str(e))
+            report = "classification_report error"
+    else:
+        logger.warning("No labeled tokens found in dev predictions; skipping classification_report.")
+        report = ""
 
     sentence_list = []
     test_data, imgs, _ = processor._read_sbtsv(os.path.join(args.data_dir, "test.txt"))
