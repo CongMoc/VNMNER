@@ -775,12 +775,23 @@ if args.do_train:
                 sentence = dev_data[i][0]
                 sentence_list.append(sentence)
 
-            reverse_label_map = {
-                label: i
-                for i, label in enumerate(label_list, 1)
-            }
+            # Build idx->label mapping (needed by evaluate function)
+            # Collect all label IDs present in predictions/ground truth
+            all_ids = set(
+                [lab_id for seq in (y_true_idx + y_pred_idx) for lab_id in seq])
+            idx_to_label = {}
+            # Map known labels from label_list (enumerate starting at 1)
+            for i, label in enumerate(label_list, 1):
+                idx_to_label[i] = label
+            # Ensure pad/zero maps to 'O' or '<pad>' if present
+            idx_to_label[0] = idx_to_label.get(0, 'O')
+            # Cover any remaining IDs found in data by assigning 'O'
+            for id_ in all_ids:
+                if id_ not in idx_to_label:
+                    idx_to_label[id_] = 'O'
+
             acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list,
-                                     reverse_label_map)
+                                     idx_to_label)
 
             logger.info("***** Dev Eval results *****")
             logger.info("\n%s", report)
@@ -951,8 +962,18 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
         fout.write(' '.join(samp_true_label) + '\n' + '\n')
     fout.close()
 
-    reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
-    acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
+    # Build idx->label mapping for test evaluation (same as dev)
+    all_ids = set(
+        [lab_id for seq in (y_true_idx + y_pred_idx) for lab_id in seq])
+    idx_to_label = {}
+    for i, label in enumerate(label_list, 1):
+        idx_to_label[i] = label
+    idx_to_label[0] = idx_to_label.get(0, 'O')
+    for id_ in all_ids:
+        if id_ not in idx_to_label:
+            idx_to_label[id_] = 'O'
+
+    acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
     print("Overall: ", p, r, f1)
 
     output_eval_file = os.path.join(args.output_dir, "eval_results.txt")

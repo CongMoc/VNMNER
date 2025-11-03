@@ -632,8 +632,8 @@ if args.do_train:
             sentence = dev_data[i][0]
             sentence_list.append(sentence)
 
-        reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
-        acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
+        idx_to_label = {i: label for i, label in enumerate(label_list, 1)}
+        acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
 
         logger.info("***** Dev Eval results *****")
         logger.info("\n%s", report)
@@ -779,8 +779,8 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
         fout.write(' '.join(samp_true_label) + '\n' + '\n')
     fout.close()
 
-    reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
-    acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
+    idx_to_label = {i: label for i, label in enumerate(label_list, 1)}
+    acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
     print("Overall: ", p, r, f1)
 
     output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
