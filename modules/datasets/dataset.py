@@ -168,7 +168,25 @@ class MNERProcessor(DataProcessor):
         return self._create_examples(data, imgs, auxlabels, "test")
 
     def get_labels(self):
-        return ["O", "B-DATETIME", "I-DATETIME", "B-DATETIME-DATE", "I-DATETIME-DATE", "I-EVENT-SPORT", "B-EVENT-SPORT", "B-QUANTITY-NUM", "I-QUANTITY-NUM", "B-PERSON", "I-PERSON", "I-IP", "B-IP", "B-PERSONTYPE", "I-PERSONTYPE", "B-EVENT-CUL", "I-EVENT-CUL", "B-LOCATION-GPE", "I-LOCATION-GPE", "B-LOCATION-STRUC", "I-LOCATION-STRUC", "X", "[CLS]", "[SEP]"]
+        # Custom Vietnamese MNER dataset (sonba)
+        # Has 6 entity types: DATE, LOC, NUM, ORG, OTHER, PER
+        return [
+            "O",
+            "B-DATE",
+            "I-DATE",
+            "B-LOC",
+            "I-LOC",
+            "B-NUM",
+            "I-NUM",
+            "B-ORG",
+            "I-ORG",
+            "B-OTHER",
+            "I-OTHER",
+            "B-PER",
+            "I-PER",
+            "X",
+            "[CLS]",
+            "[SEP]"]
 
     def get_auxlabels(self):
         return ["O", "B", "I", "X", "[CLS]", "[SEP]"]

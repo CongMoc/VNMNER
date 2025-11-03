@@ -243,16 +243,22 @@ class MNERProcessor(DataProcessor):
         # "B-LOCATION-GEO",
         # "B-EMAIL","X","<s>", "</s>"]
 
-        # vlsp2016
+        # Custom Vietnamese MNER dataset (sonba)
+        # Has 6 entity types: DATE, LOC, NUM, ORG, OTHER, PER
         return [
-            "O", "B-ORG",
-            "B-MISC",
-            "I-PER",
-            "I-ORG",
+            "O",
+            "B-DATE",
+            "I-DATE",
             "B-LOC",
-            "I-MISC",
             "I-LOC",
+            "B-NUM",
+            "I-NUM",
+            "B-ORG",
+            "I-ORG",
+            "B-OTHER",
+            "I-OTHER",
             "B-PER",
+            "I-PER",
             "X",
             "<s>",
             "</s>"]

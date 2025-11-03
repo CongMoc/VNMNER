@@ -180,27 +180,25 @@ class MNERProcessor(DataProcessor):
         return self._create_examples(data, imgs, auxlabels, "test")
 
     def get_labels(self):
-        # Explicit label set as requested
+        # Custom Vietnamese MNER dataset (sonba)
+        # Has 6 entity types: DATE, LOC, NUM, ORG, OTHER, PER
         return [
-            "B-ORG",
-            "B-MISC",
-            "I-PER",
-            "I-ORG",
-            "B-LOC",
-            "I-MISC",
-            "I-LOC",
             "O",
-            "B-PER",
-            "B-NUM",
-            "I-NUM",
             "B-DATE",
             "I-DATE",
+            "B-LOC",
+            "I-LOC",
+            "B-NUM",
+            "I-NUM",
+            "B-ORG",
+            "I-ORG",
             "B-OTHER",
             "I-OTHER",
+            "B-PER",
+            "I-PER",
             "X",
             "<s>",
-            "</s>",
-        ]
+            "</s>"]
 
         # vlsp2018
         # return ["O","I-ORGANIZATION","B-ORGANIZATION","I-LOCATION","B-MISCELLANEOUS","I-PERSON","B-PERSON","I-MISCELLANEOUS","B-LOCATION","X","<s>","</s>"]
