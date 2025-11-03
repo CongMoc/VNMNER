@@ -244,13 +244,15 @@ class MNERProcessor(DataProcessor):
         # "B-EMAIL","X","<s>", "</s>"]
 
         # Custom Vietnamese MNER dataset (sonba)
-        # Has 6 entity types: DATE, LOC, NUM, ORG, OTHER, PER
+        # Has 7 entity types: DATE, LOC, MISC, NUM, ORG, OTHER, PER
         return [
             "O",
             "B-DATE",
             "I-DATE",
             "B-LOC",
             "I-LOC",
+            "B-MISC",
+            "I-MISC",
             "B-NUM",
             "I-NUM",
             "B-ORG",
