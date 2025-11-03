@@ -115,9 +115,14 @@ def sbreadfile(filename):
 
     for raw in f:
         line = raw.rstrip('\n')
-        # handle IMGID lines
-        if line.startswith('IMGID:'):
-            raw_id = line.split('IMGID:')[1].strip()
+        # Handle both IMGID: and IMID: (common typo in data)
+        if line.startswith('IMGID:') or line.startswith('IMID:'):
+            # Extract ID from either IMGID: or IMID:
+            if line.startswith('IMGID:'):
+                raw_id = line.split('IMGID:')[1].strip()
+            else:
+                raw_id = line.split('IMID:')[1].strip()
+            
             if raw_id == '':
                 imgid = ''
             else:
