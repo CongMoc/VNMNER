@@ -922,12 +922,18 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             y_pred_idx.append(tmp2_idx)
 
 
-    # Guard against empty prediction lists for test evaluation as well
-    if not any(len(s) > 0 for s in y_true):
-        logger.warning("No labeled tokens found in test predictions; skipping classification_report.")
-        report = ""
+    # Defensive guard for test evaluation
+    logger.info("Total test predictions collected: %d", len(y_pred))
+    logger.info("Total test true labels collected: %d", len(y_true))
+    if y_true and y_pred and any(len(s) > 0 for s in y_true):
+        try:
+            report = classification_report(y_true, y_pred, digits=4)
+        except ValueError as e:
+            logger.warning("classification_report failed on test: %s", str(e))
+            report = "classification_report error"
     else:
-        report = classification_report(y_true, y_pred, digits=4)
+        logger.warning("No labeled tokens in test predictions; skipping.")
+        report = ""
 
     sentence_list = []
     test_data, imgs, _ = processor._read_sbtsv(os.path.join(args.data_dir, "test.txt"))
