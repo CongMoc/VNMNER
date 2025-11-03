@@ -14,8 +14,13 @@ from modules.model_architecture.UMT_PixelCNN import UMT_PixelCNN
 from modules.resnet import resnet as resnet
 from modules.resnet.resnet_utils import myResnet
 from modules.datasets.dataset_roberta_main import convert_mm_examples_to_features,MNERProcessor
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import (
+    DataLoader,
+    RandomSampler,
+    SequentialSampler,
+    TensorDataset,
+    DistributedSampler,
+)
 from pytorch_pretrained_bert.optimization import BertAdam,warmup_linear
 from ner_evaluate import evaluate_each_class
 from seqeval.metrics import classification_report
@@ -394,16 +399,22 @@ if args.do_train:
 if args.mm_model == 'MTCCMBert':
     config = RobertaConfig.from_pretrained(args.bert_model, cache_dir='cache')
     roberta_pretrained = RobertaModel.from_pretrained(args.bert_model, cache_dir='cache')
-    model = UMT_PixelCNN(config, layer_num1=args.layer_num1,
-                                layer_num2=args.layer_num2,
-                                layer_num3=args.layer_num3,
-                                num_labels_=num_labels, auxnum_labels = auxnum_labels)
+    model = UMT_PixelCNN(
+        config,
+        layer_num1=args.layer_num1,
+        layer_num2=args.layer_num2,
+        layer_num3=args.layer_num3,
+        num_labels_=num_labels,
+        auxnum_labels=auxnum_labels,
+    )
     model.roberta.load_state_dict(roberta_pretrained.state_dict())
 else:
     print('please define your MNER Model')
 
 net = getattr(resnet, 'resnet152')()
-net.load_state_dict(torch.load(os.path.join(args.resnet_root, 'resnet152.pth'), weights_only=False))
+net.load_state_dict(
+    torch.load(os.path.join(args.resnet_root, 'resnet152.pth'), weights_only=False)
+)
 encoder = myResnet(net, args.fine_tune_cnn, device)
 
 # if args.fp16:
@@ -418,7 +429,8 @@ if args.local_rank != -1:
         from apex.parallel import DistributedDataParallel as DDP
     except ImportError:
         raise ImportError(
-            "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+            "Please install apex from https://github.com/nvidia/apex "
+            "to use distributed and fp16 training.")
 
     model = DDP(model)
     encoder = DDP(encoder)
@@ -431,10 +443,29 @@ no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
 
 weight_decay_pixelcnn = args.weight_decay_pixelcnn
 optimizer_grouped_parameters = [
-    {'params': [p for n, p in param_optimizer if not any(nd in n for nd in ['image_decoder']) and not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-    {'params': [p for n, p in param_optimizer if not any(nd in n for nd in ['image_decoder']) and any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
-    # {'lr' : 0.001, 'params': [p for n, p in param_optimizer if any(nd in n for nd in ['image_decoder'])], 'weight_decay': 0.00005}
-    {'lr' : 0.001, 'params': [p for n, p in param_optimizer if any(nd in n for nd in ['image_decoder'])], 'weight_decay': weight_decay_pixelcnn}
+    {
+        'params': [
+            p for n, p in param_optimizer
+            if not any(nd in n for nd in ['image_decoder']) and not any(nd in n for nd in no_decay)
+        ],
+        'weight_decay': 0.01,
+    },
+    {
+        'params': [
+            p for n, p in param_optimizer
+            if not any(nd in n for nd in ['image_decoder']) and any(nd in n for nd in no_decay)
+        ],
+        'weight_decay': 0.0,
+    },
+    # {'lr': 0.001, 'params': [p for n, p in param_optimizer if any(nd in n for nd in ['image_decoder'])], 'weight_decay': 0.00005}
+    {
+        'lr': 0.001,
+        'params': [
+            p for n, p in param_optimizer
+            if any(nd in n for nd in ['image_decoder'])
+        ],
+        'weight_decay': weight_decay_pixelcnn,
+    },
 ]
 
 if args.fp16:
@@ -443,22 +474,30 @@ if args.fp16:
         from apex.optimizers import FusedAdam
     except ImportError:
         raise ImportError(
-            "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+            "Please install apex from https://github.com/nvidia/apex "
+            "to use distributed and fp16 training.")
 
-    optimizer = FusedAdam(optimizer_grouped_parameters,
-                            lr=args.learning_rate,
-                            bias_correction=False,
-                            max_grad_norm=1.0)
+    optimizer = FusedAdam(
+        optimizer_grouped_parameters,
+        lr=args.learning_rate,
+        bias_correction=False,
+        max_grad_norm=1.0,
+    )
     if args.loss_scale == 0:
         optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
     else:
-        optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
+        optimizer = FP16_Optimizer(
+            optimizer,
+            static_loss_scale=args.loss_scale,
+        )
 
 else:
-    optimizer = BertAdam(optimizer_grouped_parameters,
-                            lr=args.learning_rate,
-                            warmup=args.warmup_proportion,
-                            t_total=num_train_optimization_steps)
+    optimizer = BertAdam(
+        optimizer_grouped_parameters,
+        lr=args.learning_rate,
+        warmup=args.warmup_proportion,
+        t_total=num_train_optimization_steps,
+    )
 
 global_step = 0
 nb_tr_steps = 0
@@ -479,21 +518,48 @@ sigma = args.sigma
 
 
 if args.do_train:
-    train_dataloader_save_path = args.data_dir+ "/train_dataloader_dataset.pth"
-    dev_dataloader_save_path = args.data_dir+ "/dev_dataloader_dataset.pth"
+    train_dataloader_save_path = args.data_dir + "/train_dataloader_dataset.pth"
+    dev_dataloader_save_path = args.data_dir + "/dev_dataloader_dataset.pth"
     if not os.path.exists(train_dataloader_save_path):
         train_features = convert_mm_examples_to_features(
-            train_examples, label_list, auxlabel_list, args.max_seq_length, tokenizer, args.crop_size, args.path_image)
-        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        all_added_input_mask = torch.tensor([f.added_input_mask for f in train_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
+            train_examples,
+            label_list,
+            auxlabel_list,
+            args.max_seq_length,
+            tokenizer,
+            args.crop_size,
+            args.path_image,
+        )
+        all_input_ids = torch.tensor(
+            [f.input_ids for f in train_features], dtype=torch.long
+        )
+        all_input_mask = torch.tensor(
+            [f.input_mask for f in train_features], dtype=torch.long
+        )
+        all_added_input_mask = torch.tensor(
+            [f.added_input_mask for f in train_features], dtype=torch.long
+        )
+        all_segment_ids = torch.tensor(
+            [f.segment_ids for f in train_features], dtype=torch.long
+        )
         all_img_feats = torch.stack([f.img_feat for f in train_features])
         all_image_ti_feat = torch.stack([f.img_ti_feat for f in train_features])
-        all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
-        all_auxlabel_ids = torch.tensor([f.auxlabel_id for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_added_input_mask, \
-                                    all_segment_ids, all_img_feats, all_image_ti_feat, all_label_ids,all_auxlabel_ids)
+        all_label_ids = torch.tensor(
+            [f.label_id for f in train_features], dtype=torch.long
+        )
+        all_auxlabel_ids = torch.tensor(
+            [f.auxlabel_id for f in train_features], dtype=torch.long
+        )
+        train_data = TensorDataset(
+            all_input_ids,
+            all_input_mask,
+            all_added_input_mask,
+            all_segment_ids,
+            all_img_feats,
+            all_image_ti_feat,
+            all_label_ids,
+            all_auxlabel_ids,
+        )
         torch.save(train_data, train_dataloader_save_path)
     else:
         print("Loading the train_data (TensorDataset)")
@@ -502,23 +568,51 @@ if args.do_train:
         train_sampler = RandomSampler(train_data)
     else:
         train_sampler = DistributedSampler(train_data)
-    train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+    train_dataloader = DataLoader(
+        train_data, sampler=train_sampler, batch_size=args.train_batch_size
+    )
 
     dev_eval_examples = processor.get_dev_examples(args.data_dir)
     if not os.path.exists(dev_dataloader_save_path):
         dev_eval_features = convert_mm_examples_to_features(
-            dev_eval_examples, label_list, auxlabel_list, args.max_seq_length, tokenizer, args.crop_size,
-            args.path_image)
-        all_input_ids = torch.tensor([f.input_ids for f in dev_eval_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in dev_eval_features], dtype=torch.long)
-        all_added_input_mask = torch.tensor([f.added_input_mask for f in dev_eval_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in dev_eval_features], dtype=torch.long)
+            dev_eval_examples,
+            label_list,
+            auxlabel_list,
+            args.max_seq_length,
+            tokenizer,
+            args.crop_size,
+            args.path_image,
+        )
+        all_input_ids = torch.tensor(
+            [f.input_ids for f in dev_eval_features], dtype=torch.long
+        )
+        all_input_mask = torch.tensor(
+            [f.input_mask for f in dev_eval_features], dtype=torch.long
+        )
+        all_added_input_mask = torch.tensor(
+            [f.added_input_mask for f in dev_eval_features], dtype=torch.long
+        )
+        all_segment_ids = torch.tensor(
+            [f.segment_ids for f in dev_eval_features], dtype=torch.long
+        )
         all_img_feats = torch.stack([f.img_feat for f in dev_eval_features])
         all_image_ti_feat = torch.stack([f.img_ti_feat for f in dev_eval_features])
-        all_label_ids = torch.tensor([f.label_id for f in dev_eval_features], dtype=torch.long)
-        all_auxlabel_ids = torch.tensor([f.auxlabel_id for f in dev_eval_features], dtype=torch.long)
-        dev_eval_data = TensorDataset(all_input_ids, all_input_mask, all_added_input_mask, all_segment_ids,
-                                        all_img_feats, all_image_ti_feat, all_label_ids, all_auxlabel_ids)
+        all_label_ids = torch.tensor(
+            [f.label_id for f in dev_eval_features], dtype=torch.long
+        )
+        all_auxlabel_ids = torch.tensor(
+            [f.auxlabel_id for f in dev_eval_features], dtype=torch.long
+        )
+        dev_eval_data = TensorDataset(
+            all_input_ids,
+            all_input_mask,
+            all_added_input_mask,
+            all_segment_ids,
+            all_img_feats,
+            all_image_ti_feat,
+            all_label_ids,
+            all_auxlabel_ids,
+        )
         torch.save(dev_eval_data, dev_dataloader_save_path)
     else:
         print("Loading the dev_dataloader_save_path (TensorDataset)")
@@ -625,43 +719,108 @@ if args.do_train:
                             tmp2_idx.append(logits[i][j])
                     else:
                         break
-                y_true.append(temp_1)
-                y_pred.append(temp_2)
-                y_true_idx.append(tmp1_idx)
-                y_pred_idx.append(tmp2_idx)
+                # Only add non-empty sequences
+                if temp_1 and temp_2:
+                    y_true.append(temp_1)
+                    y_pred.append(temp_2)
+                    y_true_idx.append(tmp1_idx)
+                    y_pred_idx.append(tmp2_idx)
 
+        # Defensive dev evaluation (based on wo_CL flow)
+        logger.info("Total dev predictions collected: %d", len(y_pred))
+        logger.info("Total dev true labels collected: %d", len(y_true))
 
-        report = classification_report(y_true, y_pred, digits=4)
-        sentence_list = []
-        dev_data, imgs, _ = processor._read_sbtsv(os.path.join(args.data_dir, "dev.txt"))
-        for i in range(len(y_pred)):
-            sentence = dev_data[i][0]
-            sentence_list.append(sentence)
+        if len(y_pred) > 0:
+            sample_pred = y_pred[0] if y_pred[0] else "EMPTY"
+            sample_true = y_true[0] if y_true[0] else "EMPTY"
+            logger.info("Sample dev y_pred[0]: %s", str(sample_pred))
+            logger.info("Sample dev y_true[0]: %s", str(sample_true))
 
-        reverse_label_map = {label: i for i, label in enumerate(label_list, 1)}
-        acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, reverse_label_map)
+        non_empty_count = sum(1 for seq in y_pred if len(seq) > 0)
+        total_dev_preds = len(y_pred)
+        logger.info("Non-empty sequences in dev y_pred: %d/%d", non_empty_count,
+                    total_dev_preds)
 
-        logger.info("***** Dev Eval results *****")
-        logger.info("\n%s", report)
-        print("Overall: ", p, r, f1)
-        F_score_dev = f1
+        if y_true and y_pred and len(y_true) > 0 and len(y_pred) > 0:
+            y_true_filtered = [seq for seq in y_true if len(seq) > 0]
+            y_pred_filtered = [seq for seq in y_pred if len(seq) > 0]
 
-        if F_score_dev >= max_dev_f1:
-            # Save a trained model and the associated configuration
-            model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-            encoder_to_save = encoder.module if hasattr(encoder,
-                                                        'module') else encoder  # Only save the model it-self
-            torch.save(model_to_save.state_dict(), output_model_file)
-            torch.save(encoder_to_save.state_dict(), output_encoder_file)
-            with open(output_config_file, 'w') as f:
-                f.write(model_to_save.config.to_json_string())
-            label_map = {i: label for i, label in enumerate(label_list, 1)}
-            model_config = {"bert_model": args.bert_model,"best_epoch": best_dev_epoch,"max_f1": max_dev_f1, "do_lower": args.do_lower_case,
-                            "max_seq_length": args.max_seq_length, "num_labels": len(label_list) + 1,
-                            "label_map": label_map}
-            json.dump(model_config, open(os.path.join(args.output_dir, "model_config.json"), "w"))
-            max_dev_f1 = F_score_dev
-            best_dev_epoch = train_idx
+            def _contains_entity_labels(seqs):
+                non_entity = {"O", "X", "<s>", "</s>", "<pad>"}
+                for seq in seqs:
+                    for lab in seq:
+                        if lab not in non_entity:
+                            return True
+                return False
+
+            if (not _contains_entity_labels(y_true_filtered) and
+                    not _contains_entity_labels(y_pred_filtered)):
+                logger.warning("No entity labels present in dev predictions; "
+                               "skipping classification_report.")
+                report = "No entity labels"
+            else:
+                try:
+                    report = classification_report(y_true_filtered,
+                                                   y_pred_filtered,
+                                                   digits=4)
+                except ValueError as e:
+                    logger.warning("classification_report failed: %s. "
+                                   "Skipping report.", str(e))
+                    report = "classification_report error"
+
+            sentence_list = []
+            dev_data, imgs, _ = processor._read_sbtsv(
+                os.path.join(args.data_dir, "dev.txt"))
+            for i in range(len(y_pred)):
+                sentence = dev_data[i][0]
+                sentence_list.append(sentence)
+
+            reverse_label_map = {
+                label: i
+                for i, label in enumerate(label_list, 1)
+            }
+            acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list,
+                                     reverse_label_map)
+
+            logger.info("***** Dev Eval results *****")
+            logger.info("\n%s", report)
+            print("Overall: ", p, r, f1)
+            F_score_dev = f1
+
+            if F_score_dev >= max_dev_f1:
+                # Save a trained model and the associated configuration
+                if hasattr(model, 'module'):
+                    model_to_save = model.module
+                else:
+                    model_to_save = model
+                if hasattr(encoder, 'module'):
+                    encoder_to_save = encoder.module
+                else:
+                    encoder_to_save = encoder
+                torch.save(model_to_save.state_dict(), output_model_file)
+                torch.save(encoder_to_save.state_dict(), output_encoder_file)
+                with open(output_config_file, 'w') as f:
+                    f.write(model_to_save.config.to_json_string())
+                label_map = {i: label for i, label in enumerate(label_list, 1)}
+                model_config = {}
+                model_config["bert_model"] = args.bert_model
+                model_config["best_epoch"] = best_dev_epoch
+                model_config["max_f1"] = max_dev_f1
+                model_config["do_lower"] = args.do_lower_case
+                model_config["max_seq_length"] = args.max_seq_length
+                model_config["num_labels"] = len(label_list) + 1
+                model_config["label_map"] = label_map
+                json.dump(
+                    model_config,
+                    open(os.path.join(args.output_dir, "model_config.json"), "w"),
+                )
+                max_dev_f1 = F_score_dev
+                best_dev_epoch = train_idx
+        else:
+            logger.warning("No valid predictions found in dev set!")
+            logger.warning("y_true length: %d, y_pred length: %d", len(y_true),
+                           len(y_pred))
+            logger.warning("Skipping evaluation for this epoch.")
 
     logger.info("**************************************************")
     logger.info("The best epoch on the dev set: %s", best_dev_epoch)
@@ -763,7 +922,18 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             y_pred_idx.append(tmp2_idx)
 
 
-    report = classification_report(y_true, y_pred, digits=4)
+    # Defensive guard for test evaluation
+    logger.info("Total test predictions collected: %d", len(y_pred))
+    logger.info("Total test true labels collected: %d", len(y_true))
+    if y_true and y_pred and any(len(s) > 0 for s in y_true):
+        try:
+            report = classification_report(y_true, y_pred, digits=4)
+        except ValueError as e:
+            logger.warning("classification_report failed on test: %s", str(e))
+            report = "classification_report error"
+    else:
+        logger.warning("No labeled tokens in test predictions; skipping.")
+        report = ""
 
     sentence_list = []
     test_data, imgs, _ = processor._read_sbtsv(os.path.join(args.data_dir, "test.txt"))
