@@ -479,8 +479,12 @@ sigma = args.sigma
 
 
 if args.do_train:
-    train_dataloader_save_path = args.data_dir+ "/train_dataloader_dataset.pth"
-    dev_dataloader_save_path = args.data_dir+ "/dev_dataloader_dataset.pth"
+    # Tạo thư mục cache để lưu dataloader (tránh lỗi read-only trên Kaggle)
+    cache_dir = args.cache_dir if args.cache_dir else args.data_dir
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    train_dataloader_save_path = os.path.join(cache_dir, "train_dataloader_dataset.pth")
+    dev_dataloader_save_path = os.path.join(cache_dir, "dev_dataloader_dataset.pth")
     if not os.path.exists(train_dataloader_save_path):
         train_features = convert_mm_examples_to_features(
             train_examples, label_list, auxlabel_list, args.max_seq_length, tokenizer, args.crop_size, args.path_image)
@@ -685,7 +689,10 @@ else:
 
 if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
     eval_examples = processor.get_test_examples(args.data_dir)
-    test_dataloader_save_path = args.data_dir + "/test_dataloader_dataset.pth"
+    # Sử dụng cache_dir để tránh lỗi read-only trên Kaggle
+    cache_dir = args.cache_dir if args.cache_dir else args.data_dir
+    os.makedirs(cache_dir, exist_ok=True)
+    test_dataloader_save_path = os.path.join(cache_dir, "test_dataloader_dataset.pth")
     if not os.path.exists(test_dataloader_save_path):
         eval_features = convert_mm_examples_to_features(
             eval_examples, label_list, auxlabel_list, args.max_seq_length, tokenizer, args.crop_size, args.path_image)
