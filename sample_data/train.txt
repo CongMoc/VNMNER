@@ -87469,7 +87469,7 @@ Giám O
 đốc O
 Lienvietpostbank B-ORG
 
-IMID: TPO_0020335_img_01 
+IMGID:TPO_0020335_img_01 
 Phó O
 Chủ O
 tịch O

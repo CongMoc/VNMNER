@@ -62,8 +62,14 @@ def sbreadfile(filename):
 
     for raw in f:
         line = raw.rstrip('\n')
-        if line.startswith('IMGID:'):
-            raw_id = line.split('IMGID:')[1].strip()
+        # Handle both IMGID: and IMID: (common typo in data)
+        if line.startswith('IMGID:') or line.startswith('IMID:'):
+            # Extract ID from either IMGID: or IMID:
+            if line.startswith('IMGID:'):
+                raw_id = line.split('IMGID:')[1].strip()
+            else:
+                raw_id = line.split('IMID:')[1].strip()
+            
             if raw_id == '':
                 imgid = ''
             else:
@@ -243,16 +249,24 @@ class MNERProcessor(DataProcessor):
         # "B-LOCATION-GEO",
         # "B-EMAIL","X","<s>", "</s>"]
 
-        # vlsp2016
+        # Custom Vietnamese MNER dataset (sonba)
+        # Has 7 entity types: DATE, LOC, MISC, NUM, ORG, OTHER, PER
         return [
-            "O", "B-ORG",
-            "B-MISC",
-            "I-PER",
-            "I-ORG",
+            "O",
+            "B-DATE",
+            "I-DATE",
             "B-LOC",
-            "I-MISC",
             "I-LOC",
+            "B-MISC",
+            "I-MISC",
+            "B-NUM",
+            "I-NUM",
+            "B-ORG",
+            "I-ORG",
+            "B-OTHER",
+            "I-OTHER",
             "B-PER",
+            "I-PER",
             "X",
             "<s>",
             "</s>"]

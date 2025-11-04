@@ -115,9 +115,14 @@ def sbreadfile(filename):
 
     for raw in f:
         line = raw.rstrip('\n')
-        # handle IMGID lines
-        if line.startswith('IMGID:'):
-            raw_id = line.split('IMGID:')[1].strip()
+        # Handle both IMGID: and IMID: (common typo in data)
+        if line.startswith('IMGID:') or line.startswith('IMID:'):
+            # Extract ID from either IMGID: or IMID:
+            if line.startswith('IMGID:'):
+                raw_id = line.split('IMGID:')[1].strip()
+            else:
+                raw_id = line.split('IMID:')[1].strip()
+            
             if raw_id == '':
                 imgid = ''
             else:
@@ -221,12 +226,28 @@ class MNERProcessor(DataProcessor):
         return self._create_examples(data, imgs, auxlabels, "test")
 
     def get_labels(self):
-        # return os.getenv("LABELS", "").split(",")
-        # vlsp2021
-        # return ["O","I-PRODUCT-AWARD","B-MISCELLANEOUS","B-QUANTITY-NUM","B-ORGANIZATION-SPORTS","B-DATETIME","I-ADDRESS","I-PERSON","I-EVENT-SPORT","B-ADDRESS","B-EVENT-NATURAL","I-LOCATION-GPE","B-EVENT-GAMESHOW","B-DATETIME-TIMERANGE","I-QUANTITY-NUM","I-QUANTITY-AGE","B-EVENT-CUL","I-QUANTITY-TEM","I-PRODUCT-LEGAL","I-LOCATION-STRUC","I-ORGANIZATION","B-PHONENUMBER","B-IP","B-QUANTITY-AGE","I-DATETIME-TIME","I-DATETIME","B-ORGANIZATION-MED","B-DATETIME-SET","I-EVENT-CUL","B-QUANTITY-DIM","I-QUANTITY-DIM","B-EVENT","B-DATETIME-DATERANGE","I-EVENT-GAMESHOW","B-PRODUCT-AWARD","B-LOCATION-STRUC","B-LOCATION","B-PRODUCT","I-MISCELLANEOUS","B-SKILL","I-QUANTITY-ORD","I-ORGANIZATION-STOCK","I-LOCATION-GEO","B-PERSON","B-PRODUCT-COM","B-PRODUCT-LEGAL","I-LOCATION","B-QUANTITY-TEM","I-PRODUCT","B-QUANTITY-CUR","I-QUANTITY-CUR","B-LOCATION-GPE","I-PHONENUMBER","I-ORGANIZATION-MED","I-EVENT-NATURAL","I-EMAIL","B-ORGANIZATION","B-URL","I-DATETIME-TIMERANGE","I-QUANTITY","I-IP","B-EVENT-SPORT","B-PERSONTYPE","B-QUANTITY-PER","I-QUANTITY-PER","I-PRODUCT-COM","I-DATETIME-DURATION","B-LOCATION-GPE-GEO","B-QUANTITY-ORD","I-EVENT","B-DATETIME-TIME","B-QUANTITY","I-DATETIME-SET","I-LOCATION-GPE-GEO","B-ORGANIZATION-STOCK","I-ORGANIZATION-SPORTS","I-SKILL","I-URL","B-DATETIME-DURATION","I-DATETIME-DATE","I-PERSONTYPE","B-DATETIME-DATE","I-DATETIME-DATERANGE","B-LOCATION-GEO","B-EMAIL","X","<s>", "</s>"]
-
-        # vlsp2016
-        return ["O", "B-ORG", "B-MISC", "I-PER", "I-ORG", "B-LOC", "I-MISC", "I-LOC", "B-PER", "E", "X", "<s>", "</s>"]
+        # Custom Vietnamese MNER dataset (sonba)
+        # Has 7 entity types: DATE, LOC, MISC, NUM, ORG, OTHER, PER
+        return [
+            "O",
+            "B-DATE",
+            "I-DATE",
+            "B-LOC",
+            "I-LOC",
+            "B-MISC",
+            "I-MISC",
+            "B-NUM",
+            "I-NUM",
+            "B-ORG",
+            "I-ORG",
+            "B-OTHER",
+            "I-OTHER",
+            "B-PER",
+            "I-PER",
+            "E",
+            "X",
+            "<s>",
+            "</s>"]
 
         # vlsp2018
         # return ["O","I-ORGANIZATION","B-ORGANIZATION","I-LOCATION","B-MISCELLANEOUS","I-PERSON","B-PERSON","I-MISCELLANEOUS","B-LOCATION","X","<s>","</s>"]
