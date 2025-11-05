@@ -63,14 +63,16 @@ def sbreadfile(filename):
     auxlabel = []
     imgid = ''
     a = 0
-    for line in f:
+    for raw_line in f:
+        line = raw_line.strip()  # Remove all leading/trailing whitespace including \n, \r
+        
         # Handle both IMGID: and IMID: (common typo in data)
         if line.startswith('IMGID:') or line.startswith('IMID:'):
             # Extract ID from either IMGID: or IMID:
             if line.startswith('IMGID:'):
-                raw_id = line.strip().split('IMGID:')[1].strip()
+                raw_id = line.split('IMGID:')[1].strip()
             else:
-                raw_id = line.strip().split('IMID:')[1].strip()
+                raw_id = line.split('IMID:')[1].strip()
             
             if raw_id == '':
                 imgid = ''
@@ -82,7 +84,8 @@ def sbreadfile(filename):
                     imgid = raw_id
             continue
 
-        if line[0] == "\n":
+        # Empty line marks end of sentence
+        if line == '':
             if len(sentence) > 0:
                 data.append((sentence, label))
                 imgs.append(imgid)
@@ -92,19 +95,36 @@ def sbreadfile(filename):
                 imgid = ''
                 auxlabel = []
             continue
-        splits = line.split('\t')
-
-        if splits[0] == '' or splits[0].isspace() or splits[0] in SPECIAL_TOKENS or splits[0].startswith(URL_PREFIX):
-            splits[0] = "[UNK]"
-
-        sentence.append(splits[0])
-        cur_label = splits[-1][:-1]
+        
+        # Handle both tab and space separated format
+        if '\t' in line:
+            splits = line.split('\t')
+        else:
+            splits = line.split()
+        
+        # Skip empty lines
+        if len(splits) == 0:
+            continue
+        
+        # First element is the word/token
+        token = splits[0]
+        if token == '' or token.isspace() or token in SPECIAL_TOKENS or token.startswith(URL_PREFIX):
+            token = "[UNK]"
+        
+        # Last element is the label
+        cur_label = splits[-1] if len(splits) > 1 else 'O'
+        
+        # Normalize label
         if cur_label == 'B-OTHER':
             cur_label = 'B-MISC'
         elif cur_label == 'I-OTHER':
             cur_label = 'I-MISC'
+        if cur_label == '':
+            cur_label = 'O'
+        
+        sentence.append(token)
         label.append(cur_label)
-        auxlabel.append(cur_label[0])
+        auxlabel.append(cur_label[0] if len(cur_label) > 0 else 'O')
 
     if len(sentence) > 0:
         data.append((sentence, label))
