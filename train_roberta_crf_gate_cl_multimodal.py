@@ -30,6 +30,36 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
 logger = logging.getLogger(__name__)
 parser = argparse.ArgumentParser()
 ## Required parameters
+parser.add_argument("--alpha",
+                    default=0.5,
+                    type=float,
+                    help="parameter for Conversion Matrix")
+
+parser.add_argument("--beta",
+                    default=0.5,
+                    type=float,
+                    help="parameter for aux loss")
+
+parser.add_argument("--sigma",
+                    default=0.005,
+                    type=float,
+                    help="parameter for PixelCNN loss")
+
+parser.add_argument("--theta",
+                    default=0.05,
+                    type=float,
+                    help="parameter for CL loss")
+
+parser.add_argument("--weight_decay_pixelcnn",
+                    default=0.0,
+                    type=float,
+                    help="weight_decay for PixelCNN++")
+
+parser.add_argument("--lr_pixelcnn",
+                    default=0.001,
+                    type=float,
+                    help="The initial learning rate for PixelCNN++")
+
 parser.add_argument("--negative_rate",
                     default=16,
                     type=int,

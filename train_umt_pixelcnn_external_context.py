@@ -591,12 +591,13 @@ if args.do_train:
         for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
             batch = tuple(t.to(device) for t in batch)
 
-            input_ids_external, segment_ids_external, input_mask_external, added_input_mask_external, \
+            # Unpack batch according to TensorDataset order (14 tensors):
+            # 1-4: external context, 5-8: origin context, 9-10: images, 11-14: labels
+            input_ids_external, input_mask_external, added_input_mask_external, segment_ids_external, \
+            input_ids_origin, input_mask_origin, added_input_mask_origin, segment_ids_origin, \
             img_feats, image_ti_feat, \
-            added_input_mask_origin, \
-            input_ids_origin, segment_ids_origin, input_mask_origin, \
-            label_ids_external, auxlabel_ids_external, \
-            label_ids_origin, auxlabel_ids_origin = batch
+            label_ids_external, label_ids_origin, \
+            auxlabel_ids_external, auxlabel_ids_origin = batch
 
             with torch.no_grad():
                 imgs_f, img_mean, img_att = encoder(img_feats)
@@ -675,15 +676,13 @@ if args.do_train:
         #  label_ids_external, auxlabel_ids_external,
         #  label_ids_origin, auxlabel_ids_origin)
         for batch in tqdm(dev_eval_dataloader, desc="Evaluating"):
-            # --- Unpack the batch ---
-            # Note: image_ti_feat is loaded but not explicitly used in this eval loop snippet.
-            # If your model's 'image_decode' requires it, assign it accordingly.
-            (input_ids_external, segment_ids_external, input_mask_external, added_input_mask_external,
-             img_feats, _, # image_ti_feat loaded but not used here directly
-             added_input_mask_origin,
-             input_ids_origin, segment_ids_origin, input_mask_origin,
-             label_ids_external, auxlabel_ids_external,
-             label_ids_origin, auxlabel_ids_origin) = tuple(t.to(device) for t in batch)
+            # --- Unpack the batch according to TensorDataset order (14 tensors) ---
+            # 1-4: external context, 5-8: origin context, 9-10: images, 11-14: labels
+            (input_ids_external, input_mask_external, added_input_mask_external, segment_ids_external,
+             input_ids_origin, input_mask_origin, added_input_mask_origin, segment_ids_origin,
+             img_feats, image_ti_feat,
+             label_ids_external, label_ids_origin,
+             auxlabel_ids_external, auxlabel_ids_origin) = tuple(t.to(device) for t in batch)
             # Move only the necessary tensors to device for the model call
             # input_ids_external, segment_ids_external, input_mask_external, added_input_mask_external,
             # img_feats, added_input_mask_origin, input_ids_origin, segment_ids_origin, input_mask_origin,
@@ -890,17 +889,14 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
         all_auxlabel_ids_origin = torch.tensor([f.auxlabel_ids_origin for f in eval_features], dtype=torch.long)
 
         # --- Create TensorDataset with ALL tensors ---
-        # Order MUST match the evaluation loop's unpacking and potentially the model's forward method signature.
-        # Based on the training loop and model signature, a likely order is:
+        # Order MUST match train/dev dataset order for consistency:
+        # 1-4: external context, 5-8: origin context, 9-10: images, 11-14: labels
         eval_data = TensorDataset(
-            all_input_ids_external, all_segment_ids_external, all_input_mask_external, all_added_input_mask_external,
-            all_img_feats, all_image_ti_feat, # img_feats for encoder, image_ti_feat
-            all_added_input_mask_origin, # Added for model's added_attention_mask_origin if needed
-            all_input_ids_origin, all_segment_ids_origin, all_input_mask_origin, # Origin inputs if needed
-            # Note: trans_matrix, alpha, beta, theta, sigma, temp, temp_lamb are NOT from data loader
-            all_label_ids_external, all_auxlabel_ids_external, # External labels if needed (though not used in eval call)
-            all_label_ids_origin, all_auxlabel_ids_origin # Origin labels if needed (though not used in eval call)
-            # image_decode (often image_ti_feat) is handled during model call
+            all_input_ids_external, all_input_mask_external, all_added_input_mask_external, all_segment_ids_external,
+            all_input_ids_origin, all_input_mask_origin, all_added_input_mask_origin, all_segment_ids_origin,
+            all_img_feats, all_image_ti_feat,
+            all_label_ids_external, all_label_ids_origin,
+            all_auxlabel_ids_external, all_auxlabel_ids_origin
         )
         torch.save(eval_data, test_dataloader_save_path)
         print(f"Saved eval_data TensorDataset to {test_dataloader_save_path}")
@@ -927,22 +923,13 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
     # The dataloader now yields batches based on the updated TensorDataset order:
     print("Starting evaluation loop...")
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        # --- Unpack the batch according to TensorDataset order ---
-        # TensorDataset Order (based on creation above):
-        # 0:input_ids_external, 1:segment_ids_external, 2:input_mask_external, 3:added_input_mask_external,
-        # 4:img_feats, 5:image_ti_feat,
-        # 6:added_input_mask_origin,
-        # 7:input_ids_origin, 8:segment_ids_origin, 9:input_mask_origin,
-        # 10:label_ids_external, 11:auxlabel_ids_external,
-        # 12:label_ids_origin, 13:auxlabel_ids_origin
-
-        # Unpack and move tensors to device
-        (input_ids_external, segment_ids_external, input_mask_external, added_input_mask_external,
-         img_feats, image_ti_feat, # image_ti_feat loaded, might be used for image_decode
-         added_input_mask_origin,
-         input_ids_origin, segment_ids_origin, input_mask_origin,
-         label_ids_external, auxlabel_ids_external,
-         label_ids_origin, auxlabel_ids_origin) = tuple(t.to(device) for t in batch)
+        # --- Unpack the batch according to TensorDataset order (14 tensors) ---
+        # 1-4: external context, 5-8: origin context, 9-10: images, 11-14: labels
+        (input_ids_external, input_mask_external, added_input_mask_external, segment_ids_external,
+         input_ids_origin, input_mask_origin, added_input_mask_origin, segment_ids_origin,
+         img_feats, image_ti_feat,
+         label_ids_external, label_ids_origin,
+         auxlabel_ids_external, auxlabel_ids_origin) = tuple(t.to(device) for t in batch)
 
         # image_decode: Decide based on your model's needs. Often it's image_ti_feat or derived from it.
         # If not used or set to None in model.forward during eval, you can keep it as None or pass image_ti_feat.
