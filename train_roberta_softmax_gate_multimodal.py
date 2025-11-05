@@ -470,7 +470,9 @@ if args.do_train:
             sentence = dev_data[i][0]
             sentence_list.append(sentence)
 
-        idx_to_label = {i: label for i, label in enumerate(label_list, 1)}
+        # Fix: idx_to_label should start from 0 to match label_list indexing
+        idx_to_label = {i+1: label for i, label in enumerate(label_list)}
+        idx_to_label[0] = "<pad>"
         acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
 
         logger.info("***** Dev Eval results *****")
@@ -610,7 +612,9 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
         fout.write(' '.join(samp_true_label) + '\n' + '\n')
     fout.close()
 
-    idx_to_label = {i: label for i, label in enumerate(label_list, 1)}
+    # Fix: idx_to_label should start from 0 to match label_list indexing
+    idx_to_label = {i+1: label for i, label in enumerate(label_list)}
+    idx_to_label[0] = "<pad>"
     acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
     print("Overall: ", p, r, f1)
 

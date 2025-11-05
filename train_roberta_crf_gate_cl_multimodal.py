@@ -469,7 +469,12 @@ if args.do_train:
             sentence = dev_data[i][0]
             sentence_list.append(sentence)
 
-        idx_to_label = {i: label for i, label in enumerate(label_list, 1)}
+        # Fix: idx_to_label should start from 0, not 1, to match label_list indexing
+        # label_list = ["O", "B-DATE", "I-DATE", ...] starting at index 0
+        # But model predictions use index starting from 1 (0 is reserved for padding)
+        # So we need to shift: prediction_idx - 1 = label_list_idx
+        idx_to_label = {i+1: label for i, label in enumerate(label_list)}
+        idx_to_label[0] = "<pad>"
         acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
 
         logger.info("***** Dev Eval results *****")
@@ -609,7 +614,9 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
         fout.write(' '.join(samp_true_label) + '\n' + '\n')
     fout.close()
 
-    idx_to_label = {i: label for i, label in enumerate(label_list, 1)}
+    # Fix: idx_to_label should match the fix in dev evaluation
+    idx_to_label = {i+1: label for i, label in enumerate(label_list)}
+    idx_to_label[0] = "<pad>"
     acc, f1, p, r = evaluate(y_pred_idx, y_true_idx, sentence_list, idx_to_label)
     print("Overall: ", p, r, f1)
 
