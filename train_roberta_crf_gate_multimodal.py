@@ -427,6 +427,7 @@ if args.do_train:
                 imgs_f, img_mean, img_att = encoder(img_feats)
                 predicted_label_seq_ids = model(input_ids, segment_ids, input_mask, added_input_mask,imgs_f, img_att)
 
+            # CRF decode returns list of lists
             logits = predicted_label_seq_ids
             label_ids = label_ids.to('cpu').numpy()
             input_mask = input_mask.to('cpu').numpy()
@@ -435,15 +436,20 @@ if args.do_train:
                 temp_2 = []
                 tmp1_idx = []
                 tmp2_idx = []
+                pred_idx = 0  # CRF decode output index
+                
                 for j, m in enumerate(mask):
-                    if j == 0:
+                    if j == 0:  # Skip CLS
                         continue
                     if m:
                         if label_map[label_ids[i][j]] != "X" and label_map[label_ids[i][j]] != "</s>":
                             temp_1.append(label_map[label_ids[i][j]])
                             tmp1_idx.append(label_ids[i][j])
-                            temp_2.append(label_map[logits[i][j]])
-                            tmp2_idx.append(logits[i][j])
+                            if pred_idx < len(logits[i]):
+                                pred_label_id = logits[i][pred_idx]
+                                temp_2.append(label_map.get(pred_label_id, "O"))
+                                tmp2_idx.append(pred_label_id)
+                        pred_idx += 1
                     else:
                         break
                 y_true.append(temp_1)
@@ -564,16 +570,20 @@ if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0)
             temp_2 = []
             tmp1_idx = []
             tmp2_idx = []
+            pred_idx = 0  # CRF decode output index
 
             for j, m in enumerate(mask):
-                if j == 0:
+                if j == 0:  # Skip CLS
                     continue
                 if m:
                     if label_map[label_ids[i][j]] != "X" and label_map[label_ids[i][j]] != "</s>":
                         temp_1.append(label_map[label_ids[i][j]])
                         tmp1_idx.append(label_ids[i][j])
-                        temp_2.append(label_map[logits[i][j]])
-                        tmp2_idx.append(logits[i][j])
+                        if pred_idx < len(logits[i]):
+                            pred_label_id = logits[i][pred_idx]
+                            temp_2.append(label_map.get(pred_label_id, "O"))
+                            tmp2_idx.append(pred_label_id)
+                    pred_idx += 1
                 else:
 
                     break

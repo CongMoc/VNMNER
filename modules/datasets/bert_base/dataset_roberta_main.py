@@ -249,6 +249,18 @@ def convert_mm_examples_to_features(examples, label_list, auxlabel_list,
         textlist = example.text_a.split(' ')
         labellist = example.label
         auxlabellist = example.auxlabel
+        
+        # Debug: check if lengths match
+        if len(textlist) != len(labellist):
+            print(f"Warning: Example {ex_index} has mismatched lengths - text: {len(textlist)}, labels: {len(labellist)}")
+            print(f"  Text: {textlist[:10]}")
+            print(f"  Labels: {labellist[:10]}")
+            # Skip this example or truncate to match
+            min_len = min(len(textlist), len(labellist))
+            textlist = textlist[:min_len]
+            labellist = labellist[:min_len]
+            auxlabellist = auxlabellist[:min_len]
+        
         tokens = []
         labels = []
         auxlabels = []
